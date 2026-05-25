@@ -153,6 +153,12 @@ export interface MarketMeshKernelOptions {
   hooks?: MarketMeshHooks;
 }
 
+export interface AuthenticatedUser {
+  id: string;
+  roles: Role[];
+  isAdmin: boolean;
+}
+
 export interface Notification {
   id: string;
   userId: string;
