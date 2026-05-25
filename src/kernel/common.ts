@@ -1,11 +1,12 @@
 import { type NextFunction, type Request, type Response } from 'express';
 import jwt from 'jsonwebtoken';
-import { type MarketMeshConfig, type MarketMeshStore, UserRole } from '../types/marketmesh';
+import type { MarketMeshConfig, MarketMeshStore, Role } from '../types/marketmesh';
 
 export interface AuthTokenPayload {
   sub: string;
-  role: UserRole;
   email: string;
+  roles: Role[];
+  isAdmin: boolean;
   type: 'access' | 'refresh';
 }
 
@@ -46,9 +47,9 @@ export function getUser(store: MarketMeshStore, userId?: string) {
   return store.users.get(userId);
 }
 
-export function requireRole(roles: UserRole[]) {
+export function requireRole(roles: Role[]) {
   return (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
-    if (!req.user || !roles.includes(req.user.role)) {
+    if (!req.user || !roles.some((role) => req.user!.roles.includes(role))) {
       res.status(403).json({ error: 'Forbidden' });
       return;
     }

@@ -40,7 +40,7 @@ function getUser(store, userId) {
 }
 function requireRole(roles) {
     return (req, res, next) => {
-        if (!req.user || !roles.includes(req.user.role)) {
+        if (!req.user || !roles.some((role) => req.user.roles.includes(role))) {
             res.status(403).json({ error: 'Forbidden' });
             return;
         }

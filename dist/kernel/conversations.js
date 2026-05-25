@@ -2,9 +2,14 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createConversationsRouter = createConversationsRouter;
 const express_1 = require("express");
-const uuid_1 = require("uuid");
 const common_1 = require("./common");
 const ContentPolicyService_1 = require("../services/ContentPolicyService");
+function getExamSlug(store, bookingId) {
+    const booking = store.bookings.get(bookingId);
+    const service = booking?.serviceId ? store.services.get(booking.serviceId) : undefined;
+    const categoryId = service?.categoryId ?? booking?.categoryId;
+    return categoryId ? store.categories.get(categoryId)?.slug : undefined;
+}
 function createConversationsRouter({ config, store }) {
     const router = (0, express_1.Router)();
     const contentPolicyService = new ContentPolicyService_1.ContentPolicyService();
@@ -26,21 +31,20 @@ function createConversationsRouter({ config, store }) {
             res.status(404).json({ error: 'Conversation not found' });
             return;
         }
-        const booking = Array.from(store.bookings.values()).find((item) => item.id === conversation.bookingId);
-        const service = booking ? store.serviceListings.get(booking.serviceListingId) : undefined;
-        const body = req.body.body ?? '';
-        const scan = contentPolicyService.scanText(body, service?.examSlug);
+        const content = req.body.content ?? req.body.body ?? '';
+        const scan = contentPolicyService.scanText(content, getExamSlug(store, conversation.bookingId));
         if (scan.flagged) {
             res.status(422).json({ error: 'Message blocked by content policy', reasons: scan.reasons });
             return;
         }
         const message = {
-            id: (0, uuid_1.v4)(),
+            id: store.id(),
             conversationId: conversation.id,
-            authorUserId: req.user.sub,
-            body,
-            flagged: false,
-            createdAt: new Date(),
+            senderId: req.user.sub,
+            content,
+            attachments: (req.body.attachments ?? []),
+            createdAt: store.now(),
+            readAt: undefined,
         };
         store.messages.set(message.id, message);
         res.status(201).json(message);

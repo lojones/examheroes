@@ -2,7 +2,6 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.HeroVerificationService = void 0;
 const uuid_1 = require("uuid");
-const marketmesh_1 = require("../types/marketmesh");
 class HeroVerificationService {
     constructor(store) {
         this.store = store;
@@ -32,7 +31,7 @@ class HeroVerificationService {
             id: existing?.id ?? (0, uuid_1.v4)(),
             sellerProfileId,
             examProgramId,
-            verificationStatus: marketmesh_1.VerificationStatus.PENDING,
+            verificationStatus: 'PENDING',
             scoreEvidence: evidence.scoreEvidence,
             certificationEvidence: evidence.certificationEvidence,
             approvedAt: existing?.approvedAt,
@@ -48,12 +47,11 @@ class HeroVerificationService {
         if (!seller) {
             throw new Error('Seller not found');
         }
-        seller.verificationStatus = marketmesh_1.VerificationStatus.APPROVED;
-        seller.updatedAt = new Date();
+        seller.verificationStatus = 'VERIFIED';
         this.store.sellerProfiles.set(seller.id, seller);
         for (const expertise of this.store.heroExamExpertise.values()) {
             if (expertise.sellerProfileId === sellerProfileId) {
-                expertise.verificationStatus = marketmesh_1.VerificationStatus.VERIFIED;
+                expertise.verificationStatus = 'VERIFIED';
                 expertise.approvedAt = new Date();
                 expertise.approvedBy = adminId;
                 expertise.updatedAt = new Date();
@@ -67,18 +65,17 @@ class HeroVerificationService {
         if (!seller) {
             throw new Error('Seller not found');
         }
-        seller.verificationStatus = marketmesh_1.VerificationStatus.SUSPENDED;
-        seller.bio = [seller.bio, `Suspended by ${adminId}: ${reason}`].filter(Boolean).join(' | ');
-        seller.updatedAt = new Date();
+        seller.verificationStatus = 'REJECTED';
+        seller.bio = [seller.bio, `Rejected by ${adminId}: ${reason}`].filter(Boolean).join(' | ');
         this.store.sellerProfiles.set(seller.id, seller);
         return seller;
     }
     isHeroVerifiedForExam(sellerProfileId, examProgramId) {
         const seller = this.store.sellerProfiles.get(sellerProfileId);
-        if (!seller || seller.verificationStatus !== marketmesh_1.VerificationStatus.APPROVED) {
+        if (!seller || seller.verificationStatus !== 'VERIFIED') {
             return false;
         }
-        return Array.from(this.store.heroExamExpertise.values()).some((item) => item.sellerProfileId === sellerProfileId && item.examProgramId === examProgramId && item.verificationStatus === marketmesh_1.VerificationStatus.VERIFIED);
+        return Array.from(this.store.heroExamExpertise.values()).some((item) => item.sellerProfileId === sellerProfileId && item.examProgramId === examProgramId && item.verificationStatus === 'VERIFIED');
     }
     hasAcceptedPolicy(userId, examSlug) {
         const examProgram = Array.from(this.store.examPrograms.values()).find((exam) => exam.slug === examSlug);

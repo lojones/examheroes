@@ -2,30 +2,33 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createReviewsRouter = createReviewsRouter;
 const express_1 = require("express");
-const uuid_1 = require("uuid");
 const common_1 = require("./common");
-const marketmesh_1 = require("../types/marketmesh");
 function createReviewsRouter({ config, store }) {
     const router = (0, express_1.Router)();
-    router.get('/reviews/seller/:sellerProfileId', (req, res) => {
-        const reviews = Array.from(store.reviews.values()).filter((review) => review.targetSellerProfileId === req.params.sellerProfileId);
+    router.get('/reviews/seller/:sellerId', (req, res) => {
+        const reviews = Array.from(store.reviews.values()).filter((review) => review.recipientId === req.params.sellerId && review.role === 'BUYER');
         res.json(reviews);
     });
     router.post('/reviews/:bookingId', (0, common_1.authenticate)(config), (req, res) => {
         const booking = store.bookings.get(req.params.bookingId);
-        if (!booking || booking.status !== marketmesh_1.BookingStatus.COMPLETED) {
+        if (!booking || booking.status !== 'COMPLETED') {
             res.status(422).json({ error: 'Completed booking required' });
             return;
         }
+        const buyerProfile = store.findBuyerProfileByUserId(req.user?.sub ?? '');
+        if (!buyerProfile || buyerProfile.id !== booking.buyerId) {
+            res.status(403).json({ error: 'Buyer participant required' });
+            return;
+        }
         const review = {
-            id: (0, uuid_1.v4)(),
+            id: store.id(),
             bookingId: booking.id,
-            authorUserId: req.user.sub,
-            targetSellerProfileId: booking.sellerProfileId,
+            authorId: req.user.sub,
+            recipientId: booking.sellerId,
+            role: 'BUYER',
             rating: Number(req.body.rating ?? 5),
-            body: req.body.body,
-            createdAt: new Date(),
-            updatedAt: new Date(),
+            comment: req.body.comment ?? req.body.body,
+            createdAt: store.now(),
         };
         store.reviews.set(review.id, review);
         res.status(201).json(review);

@@ -11,6 +11,11 @@ export interface MatchRequest {
   requestDescription?: string;
 }
 
+function getServiceTopics(location?: Record<string, unknown>): string[] {
+  const topics = location?.topics;
+  return Array.isArray(topics) ? topics.filter((topic): topic is string => typeof topic === 'string') : [];
+}
+
 export class MatchingService {
   constructor(
     private readonly store: MarketMeshStore,
@@ -43,16 +48,17 @@ export class MatchingService {
     );
 
     const candidates = Array.from(this.store.sellerProfiles.values()).map((seller) => {
-      const service = Array.from(this.store.serviceListings.values()).find(
-        (listing) => listing.sellerProfileId === seller.id && listing.examSlug === examProgram.slug,
-      );
+      const service = Array.from(this.store.services.values()).find((listing) => {
+        const category = this.store.categories.get(listing.categoryId);
+        return listing.sellerId === seller.id && category?.slug === examProgram.slug;
+      });
       const sellerUser = this.store.users.get(seller.userId);
-      const availability = Array.from(this.store.availabilitySlots.values()).filter((slot) => slot.sellerProfileId === seller.id && !slot.isBooked);
-      const reviews = Array.from(this.store.reviews.values()).filter((review) => review.targetSellerProfileId === seller.id);
+      const availability = Array.from(this.store.availabilitySlots.values()).filter((slot) => slot.sellerId === seller.id && !slot.isBooked);
+      const reviews = Array.from(this.store.reviews.values()).filter((review) => review.recipientId === seller.id && review.role === 'BUYER');
       const exclusionReasons: string[] = [];
 
-      if (seller.verificationStatus !== 'APPROVED') {
-        exclusionReasons.push('Hero must be approved');
+      if (seller.verificationStatus !== 'VERIFIED') {
+        exclusionReasons.push('Hero must be verified');
       }
       if (!this.heroVerificationService.isHeroVerifiedForExam(seller.id, examProgramId)) {
         exclusionReasons.push('Hero must have verified expertise');
@@ -66,22 +72,22 @@ export class MatchingService {
       if (availability.length === 0) {
         exclusionReasons.push('Availability required');
       }
-      if (learnerProfile?.budget !== undefined && service && service.priceAmount > learnerProfile.budget) {
+      if (learnerProfile?.budget !== undefined && service && service.price > learnerProfile.budget) {
         exclusionReasons.push('Price exceeds learner budget');
       }
 
       const componentScores = {
-        topicFitScore: service ? this.calculateTopicFit(service.topics, request.topics ?? []) : 0,
+        topicFitScore: service ? this.calculateTopicFit(getServiceTopics(service.location), request.topics ?? [], service.title, service.description) : 0,
         expertiseScore: this.heroVerificationService.isHeroVerifiedForExam(seller.id, examProgramId) ? 1 : 0,
         availabilityScore: availability.length > 0 ? 1 : 0,
         teachingStyleScore: request.teachingStyle && seller.bio?.toLowerCase().includes(request.teachingStyle.toLowerCase()) ? 1 : 0.7,
         priceScore:
           learnerProfile?.budget && service
-            ? Math.max(0, Math.min(1, 1 - service.priceAmount / Math.max(learnerProfile.budget, 1) + 0.25))
+            ? Math.max(0, Math.min(1, 1 - service.price / Math.max(learnerProfile.budget, 1) + 0.25))
             : service
               ? 0.8
               : 0,
-        reviewScore: reviews.length ? reviews.reduce((sum, review) => sum + review.rating, 0) / (reviews.length * 5) : 0.8,
+        reviewScore: reviews.length ? reviews.reduce((sum, review) => sum + review.rating, 0) / (reviews.length * 5) : seller.reviewCount ? seller.averageRating / 5 : 0.8,
         certificationScore: Array.from(this.store.scoreVerifications.values()).some(
           (item) => item.sellerProfileId === seller.id && item.examProgramId === examProgramId && item.verificationStatus === 'APPROVED',
         )
@@ -136,16 +142,17 @@ export class MatchingService {
     return Number(weighted.toFixed(2));
   }
 
-  private calculateTopicFit(serviceTopics: string[], requestedTopics: string[]): number {
+  private calculateTopicFit(serviceTopics: string[], requestedTopics: string[], title?: string, description?: string): number {
     if (requestedTopics.length === 0) {
       return 0.8;
     }
-    const matches = requestedTopics.filter((topic) => serviceTopics.some((serviceTopic) => serviceTopic.toLowerCase() === topic.toLowerCase()));
+    const haystack = `${title ?? ''} ${description ?? ''} ${serviceTopics.join(' ')}`.toLowerCase();
+    const matches = requestedTopics.filter((topic) => haystack.includes(topic.toLowerCase()));
     return matches.length / requestedTopics.length;
   }
 
   private calculateReliability(sellerProfileId: string): number {
-    const bookings = Array.from(this.store.bookings.values()).filter((booking) => booking.sellerProfileId === sellerProfileId);
+    const bookings = Array.from(this.store.bookings.values()).filter((booking) => booking.sellerId === sellerProfileId);
     if (bookings.length === 0) {
       return 0.8;
     }

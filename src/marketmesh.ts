@@ -1,6 +1,5 @@
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'crypto';
 import { MarketMeshKernel } from './kernel';
-import { InMemoryMarketMeshStore } from './kernel/store';
 import { IntegrityPolicies } from './policies/IntegrityPolicies';
 import { ContentPolicyService } from './services/ContentPolicyService';
 import { DiagnosticService } from './services/DiagnosticService';
@@ -11,36 +10,102 @@ import { MatchingService } from './services/MatchingService';
 import { NotificationService } from './services/NotificationService';
 import { PaymentAdapter } from './services/PaymentAdapter';
 import { StudyPlanService } from './services/StudyPlanService';
-import {
-  type Category,
-  type ExamProgram,
-  type ExamSection,
-  type ExamTopic,
-  type MarketMeshConfig,
-  type MarketMeshHooks,
-  VerificationStatus,
-} from './types/marketmesh';
+import type { Booking, ExamProgram, ExamSection, ExamTopic, MarketMeshConfig, MarketMeshHooks } from './types/marketmesh';
 
 const config: MarketMeshConfig = {
   platformFeePercent: 18,
   defaultCurrency: 'USD',
-  accessTokenTtl: 900,
-  refreshTokenTtl: 604800,
-  jwtSecret: process.env.JWT_SECRET || 'dev-secret-change-in-production',
-  categories: [
-    { slug: 'lsat', name: 'LSAT', examFamily: 'law', sections: ['Logical Reasoning', 'Analytical Reasoning', 'Reading Comprehension'], scoreScale: '120-180', serviceTypes: ['concept', 'diagnostic', 'strategy', 'mock', 'package'], materialPolicy: 'original,licensed,public', prohibitsLiveExamHelp: true },
-    { slug: 'mcat', name: 'MCAT', examFamily: 'medical', sections: ['CPBS', 'CARS', 'BBFL', 'PSBB'], scoreScale: '472-528', serviceTypes: ['concept', 'diagnostic', 'strategy', 'mock', 'package'], materialPolicy: 'original,licensed,public', prohibitsLiveExamHelp: true },
-    { slug: 'gre', name: 'GRE', examFamily: 'graduate', sections: ['Verbal Reasoning', 'Quantitative Reasoning', 'Analytical Writing'], scoreScale: '260-340', serviceTypes: ['concept', 'diagnostic', 'strategy', 'mock', 'package'], materialPolicy: 'original,licensed,public', prohibitsLiveExamHelp: true },
-    { slug: 'gmat', name: 'GMAT', examFamily: 'business', sections: ['Verbal', 'Quantitative', 'Integrated Reasoning', 'Analytical Writing'], scoreScale: '200-800', serviceTypes: ['concept', 'diagnostic', 'strategy', 'mock', 'package'], materialPolicy: 'original,licensed,public', prohibitsLiveExamHelp: true },
-    { slug: 'sat', name: 'SAT', examFamily: 'college', sections: ['Evidence-Based Reading and Writing', 'Math'], scoreScale: '400-1600', serviceTypes: ['concept', 'diagnostic', 'strategy', 'mock', 'package'], materialPolicy: 'original,licensed,public', prohibitsLiveExamHelp: true },
-    { slug: 'act', name: 'ACT', examFamily: 'college', sections: ['English', 'Mathematics', 'Reading', 'Science'], scoreScale: '1-36', serviceTypes: ['concept', 'diagnostic', 'strategy', 'mock', 'package'], materialPolicy: 'original,licensed,public', prohibitsLiveExamHelp: true },
-    { slug: 'bar-exam', name: 'Bar Exam', examFamily: 'law', sections: ['MBE', 'MEE', 'MPT'], scoreScale: 'state-specific', serviceTypes: ['concept', 'diagnostic', 'strategy', 'mock', 'package'], materialPolicy: 'original,licensed,public', prohibitsLiveExamHelp: true },
-    { slug: 'cpa', name: 'CPA', examFamily: 'accounting', sections: ['FAR', 'AUD', 'REG', 'BEC'], scoreScale: '0-99', serviceTypes: ['concept', 'diagnostic', 'strategy', 'mock', 'package'], materialPolicy: 'original,licensed,public', prohibitsLiveExamHelp: true },
-    { slug: 'cfa', name: 'CFA', examFamily: 'finance', sections: ['Level I', 'Level II', 'Level III'], scoreScale: 'pass/fail', serviceTypes: ['concept', 'diagnostic', 'strategy', 'mock', 'package'], materialPolicy: 'original,licensed,public', prohibitsLiveExamHelp: true },
-    { slug: 'nclex', name: 'NCLEX', examFamily: 'nursing', sections: ['Patient Care', 'Safety', 'Health Promotion', 'Psychosocial'], scoreScale: 'pass/fail', serviceTypes: ['concept', 'diagnostic', 'strategy', 'mock', 'package'], materialPolicy: 'original,licensed,public', prohibitsLiveExamHelp: true },
-    { slug: 'aws-certification', name: 'AWS Certification', examFamily: 'cloud', sections: ['Cloud Concepts', 'Security', 'Technology', 'Billing'], scoreScale: '100-1000', serviceTypes: ['concept', 'diagnostic', 'strategy', 'mock', 'package'], materialPolicy: 'original,licensed,public', prohibitsLiveExamHelp: true },
-    { slug: 'comptia', name: 'CompTIA', examFamily: 'it-certification', sections: ['A+', 'Network+', 'Security+', 'CySA+'], scoreScale: '100-900', serviceTypes: ['concept', 'diagnostic', 'strategy', 'mock', 'package'], materialPolicy: 'original,licensed,public', prohibitsLiveExamHelp: true },
-  ],
+  accessTokenTtlSeconds: 900,
+  refreshTokenTtlSeconds: 604800,
+  jwtSecret: process.env.JWT_SECRET ?? 'dev-secret-change-in-production',
+  categories: ['LSAT', 'MCAT', 'GRE', 'GMAT', 'SAT', 'ACT', 'Bar Exam', 'CPA', 'CFA', 'NCLEX', 'AWS Certification', 'CompTIA'],
+};
+
+const examDefinitions: Record<string, { examFamily: string; abbreviation: string; governingBody: string; sections: string[]; scoreScale: string }> = {
+  lsat: {
+    examFamily: 'law',
+    abbreviation: 'LSAT',
+    governingBody: 'LSAC',
+    sections: ['Logical Reasoning', 'Analytical Reasoning', 'Reading Comprehension'],
+    scoreScale: '120-180',
+  },
+  mcat: {
+    examFamily: 'medical',
+    abbreviation: 'MCAT',
+    governingBody: 'AAMC',
+    sections: ['CPBS', 'CARS', 'BBFL', 'PSBB'],
+    scoreScale: '472-528',
+  },
+  gre: {
+    examFamily: 'graduate',
+    abbreviation: 'GRE',
+    governingBody: 'ETS',
+    sections: ['Verbal Reasoning', 'Quantitative Reasoning', 'Analytical Writing'],
+    scoreScale: '260-340',
+  },
+  gmat: {
+    examFamily: 'business',
+    abbreviation: 'GMAT',
+    governingBody: 'GMAC',
+    sections: ['Verbal', 'Quantitative', 'Integrated Reasoning', 'Analytical Writing'],
+    scoreScale: '200-800',
+  },
+  sat: {
+    examFamily: 'college',
+    abbreviation: 'SAT',
+    governingBody: 'College Board',
+    sections: ['Evidence-Based Reading and Writing', 'Math'],
+    scoreScale: '400-1600',
+  },
+  act: {
+    examFamily: 'college',
+    abbreviation: 'ACT',
+    governingBody: 'ACT',
+    sections: ['English', 'Mathematics', 'Reading', 'Science'],
+    scoreScale: '1-36',
+  },
+  'bar-exam': {
+    examFamily: 'law',
+    abbreviation: 'Bar Exam',
+    governingBody: 'NCBE',
+    sections: ['MBE', 'MEE', 'MPT'],
+    scoreScale: 'state-specific',
+  },
+  cpa: {
+    examFamily: 'accounting',
+    abbreviation: 'CPA',
+    governingBody: 'AICPA',
+    sections: ['FAR', 'AUD', 'REG', 'BEC'],
+    scoreScale: '0-99',
+  },
+  cfa: {
+    examFamily: 'finance',
+    abbreviation: 'CFA',
+    governingBody: 'CFA Institute',
+    sections: ['Level I', 'Level II', 'Level III'],
+    scoreScale: 'pass/fail',
+  },
+  nclex: {
+    examFamily: 'nursing',
+    abbreviation: 'NCLEX',
+    governingBody: 'NCSBN',
+    sections: ['Patient Care', 'Safety', 'Health Promotion', 'Psychosocial'],
+    scoreScale: 'pass/fail',
+  },
+  'aws-certification': {
+    examFamily: 'cloud',
+    abbreviation: 'AWS',
+    governingBody: 'Amazon Web Services',
+    sections: ['Cloud Concepts', 'Security', 'Technology', 'Billing'],
+    scoreScale: '100-1000',
+  },
+  comptia: {
+    examFamily: 'it-certification',
+    abbreviation: 'CompTIA',
+    governingBody: 'CompTIA',
+    sections: ['A+', 'Network+', 'Security+', 'CySA+'],
+    scoreScale: '100-900',
+  },
 };
 
 export interface ExamHeroesServices {
@@ -55,6 +120,14 @@ export interface ExamHeroesServices {
   notificationService: NotificationService;
 }
 
+function slugify(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
 function titleCase(slug: string): string {
   return slug
     .split('-')
@@ -62,54 +135,50 @@ function titleCase(slug: string): string {
     .join(' ');
 }
 
-function seedStore(store: InMemoryMarketMeshStore): void {
-  for (const categoryConfig of config.categories) {
-    const now = new Date();
-    const category: Category = {
-      id: uuidv4(),
-      slug: categoryConfig.slug,
-      name: categoryConfig.name,
-      examFamily: categoryConfig.examFamily,
-      sections: categoryConfig.sections,
-      scoreScale: categoryConfig.scoreScale,
-      serviceTypes: categoryConfig.serviceTypes,
-      materialPolicy: categoryConfig.materialPolicy,
-      prohibitsLiveExamHelp: categoryConfig.prohibitsLiveExamHelp,
-      createdAt: now,
-      updatedAt: now,
-    };
-    store.categories.set(category.id, category);
+function seedExamData(kernel: MarketMeshKernel): void {
+  const store = kernel.store;
 
-    const examProgram: ExamProgram = {
-      id: uuidv4(),
-      slug: category.slug,
-      name: category.name,
-      examFamily: category.examFamily,
+  for (const category of store.categories.values()) {
+    const metadata = examDefinitions[category.slug] ?? {
+      examFamily: 'general',
       abbreviation: category.name,
       governingBody: `${category.name} Board`,
-      sections: category.sections,
-      scoreScale: category.scoreScale,
+      sections: ['Fundamentals', 'Strategy', 'Practice'],
+      scoreScale: 'varies',
+    };
+
+    const now = store.now();
+    const examProgram: ExamProgram = {
+      id: store.id(),
+      slug: category.slug,
+      name: category.name,
+      examFamily: metadata.examFamily,
+      abbreviation: metadata.abbreviation,
+      governingBody: metadata.governingBody,
+      sections: metadata.sections,
+      scoreScale: metadata.scoreScale,
       description: `${category.name} preparation program.`,
       createdAt: now,
       updatedAt: now,
     };
     store.examPrograms.set(examProgram.id, examProgram);
 
-    category.sections.forEach((sectionName, index) => {
+    metadata.sections.forEach((sectionName, index) => {
       const section: ExamSection = {
-        id: uuidv4(),
+        id: store.id(),
         examProgramId: examProgram.id,
         name: sectionName,
-        slug: `${category.slug}-${sectionName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+        slug: `${category.slug}-${slugify(sectionName)}`,
         description: `${sectionName} coverage for ${category.name}.`,
-        weight: Number((1 / category.sections.length).toFixed(2)),
+        weight: Number((1 / metadata.sections.length).toFixed(2)),
         createdAt: now,
         updatedAt: now,
       };
       store.examSections.set(section.id, section);
+
       ['fundamentals', 'timing', 'advanced'].forEach((topicSuffix, topicIndex) => {
         const topic: ExamTopic = {
-          id: uuidv4(),
+          id: store.id(),
           examSectionId: section.id,
           name: `${titleCase(topicSuffix)} ${index + 1}.${topicIndex + 1}`,
           slug: `${section.slug}-${topicSuffix}`,
@@ -124,7 +193,7 @@ function seedStore(store: InMemoryMarketMeshStore): void {
 
     const policyTemplate = IntegrityPolicies[category.slug];
     if (policyTemplate) {
-      const policyId = uuidv4();
+      const policyId = store.id();
       store.integrityPolicies.set(policyId, {
         id: policyId,
         examProgramId: examProgram.id,
@@ -143,8 +212,9 @@ function seedStore(store: InMemoryMarketMeshStore): void {
       });
     }
 
-    const assessment = {
-      id: uuidv4(),
+    const assessmentId = store.id();
+    store.diagnosticAssessments.set(assessmentId, {
+      id: assessmentId,
       examProgramId: examProgram.id,
       title: `${category.name} baseline diagnostic`,
       description: `Initial skill check for ${category.name}`,
@@ -153,66 +223,57 @@ function seedStore(store: InMemoryMarketMeshStore): void {
       isActive: true,
       createdAt: now,
       updatedAt: now,
-    };
-    store.diagnosticAssessments.set(assessment.id, assessment);
+    });
   }
 }
 
 export function createExamHeroesContext() {
-  const store = new InMemoryMarketMeshStore(config);
-  seedStore(store);
-
-  const contentPolicyService = new ContentPolicyService();
-  const heroVerificationService = new HeroVerificationService(store);
-  const integrityModerationService = new IntegrityModerationService(store, contentPolicyService);
-  const notificationService = new NotificationService(store);
-  const paymentAdapter = new PaymentAdapter(store, process.env.STRIPE_WEBHOOK_SECRET || 'webhook-secret');
-  const examTaxonomyService = new ExamTaxonomyService(store);
-  const diagnosticService = new DiagnosticService(store);
-  const studyPlanService = new StudyPlanService(store);
-  const matchingService = new MatchingService(store, heroVerificationService, contentPolicyService);
+  let kernel!: MarketMeshKernel;
+  let services!: ExamHeroesServices;
 
   const hooks: MarketMeshHooks = {
-    beforeSellerActivation: async (sellerProfile) => ({
-      allowed: sellerProfile.verificationStatus !== VerificationStatus.SUSPENDED,
-      verificationStatus: sellerProfile.verificationStatus,
-    }),
-    customizeSellerOnboarding: async (sellerProfile) => ({
-      sellerProfileId: sellerProfile.id,
-      checklist: ['Submit identity documents', 'Submit expertise evidence', 'Accept integrity policy'],
-    }),
-    beforeBooking: async (bookingInput) => integrityModerationService.canBookingProceed(bookingInput),
-    onBookingCreated: async (booking, seededStore) => {
-      const existingConversation = Array.from(seededStore.conversations.values()).find((conversation) => conversation.bookingId === booking.id);
+    beforeSellerActivation: async (sellerId: string) => {
+      const sellerProfile = kernel.store.sellerProfiles.get(sellerId);
+      if (!sellerProfile) {
+        throw new Error('Seller profile not found');
+      }
+      if (sellerProfile.verificationStatus === 'REJECTED') {
+        throw new Error('Seller onboarding is blocked for this profile');
+      }
+    },
+    onBookingCreated: async (booking: Booking) => {
+      const store = kernel.store;
+      const existingConversation = Array.from(store.conversations.values()).find((conversation) => conversation.bookingId === booking.id);
       if (!existingConversation) {
-        const now = new Date();
-        const conversationId = uuidv4();
-        seededStore.conversations.set(conversationId, {
+        const now = store.now();
+        const conversationId = store.id();
+        store.conversations.set(conversationId, {
           id: conversationId,
           bookingId: booking.id,
           createdAt: now,
-          updatedAt: now,
         });
       }
-      const existingSession = Array.from(seededStore.tutoringSessions.values()).find((session) => session.bookingId === booking.id);
+
+      const existingSession = Array.from(store.tutoringSessions.values()).find((session) => session.bookingId === booking.id);
       if (!existingSession) {
-        const service = seededStore.serviceListings.get(booking.serviceListingId);
-        const examProgram = Array.from(seededStore.examPrograms.values()).find((item) => item.slug === service?.examSlug);
+        const service = booking.serviceId ? store.services.get(booking.serviceId) : undefined;
+        const category = store.categories.get(service?.categoryId ?? booking.categoryId);
+        const examProgram = Array.from(store.examPrograms.values()).find((item) => item.slug === category?.slug);
         const currentPolicy = examProgram
-          ? Array.from(seededStore.integrityPolicies.values())
+          ? Array.from(store.integrityPolicies.values())
               .filter((policy) => policy.examProgramId === examProgram.id)
               .sort((a, b) => b.effectiveAt.getTime() - a.effectiveAt.getTime())[0]
           : undefined;
-        const now = new Date();
-        const sessionId = uuidv4();
-        seededStore.tutoringSessions.set(sessionId, {
+        const now = store.now();
+        const sessionId = store.id();
+        store.tutoringSessions.set(sessionId, {
           id: sessionId,
           bookingId: booking.id,
-          sellerProfileId: booking.sellerProfileId,
-          buyerProfileId: booking.buyerProfileId,
+          sellerProfileId: booking.sellerId,
+          buyerProfileId: booking.buyerId,
           examProgramId: examProgram?.id,
           status: 'SCHEDULED',
-          joinToken: uuidv4(),
+          joinToken: randomUUID(),
           startedAt: undefined,
           completedAt: undefined,
           recordingConsent: false,
@@ -225,32 +286,47 @@ export function createExamHeroesContext() {
           updatedAt: now,
         });
       }
-      notificationService.notifyBookingCreated(booking);
+
+      services.notificationService.notifyBookingCreated(booking);
     },
-    extendBookingPayload: async (booking, seededStore) => {
-      const service = seededStore.serviceListings.get(booking.serviceListingId);
-      const category = service ? seededStore.categories.get(service.categoryId) : undefined;
-      const conversation = Array.from(seededStore.conversations.values()).find((item) => item.bookingId === booking.id);
+    extendBookingPayload: async (booking: Booking) => {
+      const store = kernel.store;
+      const service = booking.serviceId ? store.services.get(booking.serviceId) : undefined;
+      const category = store.categories.get(service?.categoryId ?? booking.categoryId);
+      const conversation = Array.from(store.conversations.values()).find((item) => item.bookingId === booking.id);
+      const session = Array.from(store.tutoringSessions.values()).find((item) => item.bookingId === booking.id);
       return {
-        id: booking.id,
-        status: booking.status,
-        finalPrice: booking.finalPrice,
-        createdAt: booking.createdAt,
-        sellerProfileId: booking.sellerProfileId,
-        buyerProfileId: booking.buyerProfileId,
-        service: service ? { id: service.id, title: service.title, examSlug: service.examSlug } : undefined,
+        examSlug: category?.slug,
+        service: service ? { id: service.id, title: service.title, categoryId: service.categoryId } : undefined,
         category: category ? { slug: category.slug, name: category.name } : undefined,
         conversationId: conversation?.id,
+        sessionStatus: session?.status,
       };
     },
-    onPaymentCaptured: async (booking) => {
-      notificationService.notifyPaymentCaptured(booking);
+    onPaymentCaptured: async (booking: Booking) => {
+      services.notificationService.notifyPaymentCaptured(booking);
     },
+    customizeSellerOnboarding: async (sellerId: string) => ({
+      sellerId,
+      steps: ['profile', 'identity', 'exam-expertise', 'attestation', 'payouts'],
+    }),
   };
 
-  const kernel = new MarketMeshKernel({ config, hooks, store });
+  kernel = new MarketMeshKernel({ config, hooks });
+  seedExamData(kernel);
 
-  const services: ExamHeroesServices = {
+  const store = kernel.store;
+  const contentPolicyService = new ContentPolicyService();
+  const heroVerificationService = new HeroVerificationService(store);
+  const integrityModerationService = new IntegrityModerationService(store, contentPolicyService);
+  const notificationService = new NotificationService(store);
+  const paymentAdapter = new PaymentAdapter(store, process.env.STRIPE_WEBHOOK_SECRET ?? 'webhook-secret');
+  const examTaxonomyService = new ExamTaxonomyService(store);
+  const diagnosticService = new DiagnosticService(store);
+  const studyPlanService = new StudyPlanService(store);
+  const matchingService = new MatchingService(store, heroVerificationService, contentPolicyService);
+
+  services = {
     contentPolicyService,
     heroVerificationService,
     integrityModerationService,

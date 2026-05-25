@@ -52,21 +52,24 @@ class IntegrityModerationService {
     }
     canBookingProceed(bookingData) {
         const reasons = [];
-        const service = this.store.serviceListings.get(bookingData.serviceListingId);
-        const seller = this.store.sellerProfiles.get(bookingData.sellerProfileId);
-        const buyer = this.store.buyerProfiles.get(bookingData.buyerProfileId);
-        const slot = this.store.availabilitySlots.get(bookingData.availabilitySlotId);
-        if (!service || !seller || !buyer || !slot) {
+        const service = this.store.services.get(bookingData.serviceId);
+        const seller = this.store.sellerProfiles.get(bookingData.sellerId);
+        const buyer = this.store.buyerProfiles.get(bookingData.buyerId);
+        const slot = bookingData.startTime && bookingData.endTime
+            ? Array.from(this.store.availabilitySlots.values()).find((item) => item.sellerId === bookingData.sellerId && item.startTime.getTime() === bookingData.startTime.getTime() && item.endTime.getTime() === bookingData.endTime.getTime())
+            : undefined;
+        if (!service || !seller || !buyer) {
             reasons.push('Booking references missing records');
             return { allowed: false, reasons };
         }
         if (!service.isActive) {
             reasons.push('Service is inactive');
         }
-        if (seller.verificationStatus !== 'APPROVED') {
-            reasons.push('Hero is not approved');
+        if (seller.verificationStatus !== 'VERIFIED') {
+            reasons.push('Hero is not verified');
         }
-        const examProgram = Array.from(this.store.examPrograms.values()).find((item) => item.slug === service.examSlug || item.id === bookingData.examProgramId);
+        const category = this.store.categories.get(bookingData.categoryId || service.categoryId);
+        const examProgram = Array.from(this.store.examPrograms.values()).find((item) => item.slug === category?.slug);
         if (!examProgram) {
             reasons.push('Exam program not found');
         }
@@ -85,11 +88,12 @@ class IntegrityModerationService {
                 }
             }
         }
-        if (slot.isBooked) {
+        if (slot?.isBooked) {
             reasons.push('Availability slot already booked');
         }
-        if (bookingData.requestDescription) {
-            const scan = this.contentPolicyService.scanText(bookingData.requestDescription, service.examSlug);
+        const requestDescription = typeof bookingData.requestDetails?.requestDescription === 'string' ? bookingData.requestDetails.requestDescription : undefined;
+        if (requestDescription) {
+            const scan = this.contentPolicyService.scanText(requestDescription, category?.slug);
             if (scan.flagged) {
                 reasons.push(...scan.reasons);
             }

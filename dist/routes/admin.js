@@ -3,10 +3,9 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.createAdminHostRouter = createAdminHostRouter;
 const express_1 = require("express");
 const common_1 = require("../kernel/common");
-const marketmesh_1 = require("../types/marketmesh");
 function createAdminHostRouter(context) {
     const router = (0, express_1.Router)();
-    router.use('/admin', (0, common_1.authenticate)(context.config), (0, common_1.requireRole)([marketmesh_1.UserRole.ADMIN, marketmesh_1.UserRole.MODERATOR]));
+    router.use('/admin', (0, common_1.authenticate)(context.config), (0, common_1.requireRole)(['ADMIN']));
     router.post('/admin/hero-review/:sellerProfileId/approve', (req, res) => {
         res.json(context.services.heroVerificationService.approveHero(req.params.sellerProfileId, req.user.sub));
     });

@@ -8,7 +8,7 @@ function createPackagesRouter(context) {
     const router = (0, express_1.Router)();
     router.use('/packages', (0, common_1.authenticate)(context.config));
     router.post('/packages/plans', (req, res) => {
-        const sellerProfile = Array.from(context.store.sellerProfiles.values()).find((profile) => profile.userId === req.user?.sub);
+        const sellerProfile = context.store.findSellerProfileByUserId(req.user?.sub ?? '');
         if (!sellerProfile) {
             res.status(403).json({ error: 'Seller profile required' });
             return;
@@ -20,7 +20,7 @@ function createPackagesRouter(context) {
             description: req.body.description,
             sessionCount: Number(req.body.sessionCount ?? 1),
             priceAmount: Number(req.body.priceAmount ?? 0),
-            currency: String(req.body.currency ?? context.store.platformConfig.defaultCurrency),
+            currency: String(req.body.currency ?? context.config.defaultCurrency),
             expiryDays: Number(req.body.expiryDays ?? 90),
             isActive: true,
             createdAt: new Date(),
@@ -30,7 +30,7 @@ function createPackagesRouter(context) {
         res.status(201).json(plan);
     });
     router.post('/packages/purchase', (req, res) => {
-        const buyerProfile = Array.from(context.store.buyerProfiles.values()).find((profile) => profile.userId === req.user?.sub);
+        const buyerProfile = context.store.findBuyerProfileByUserId(req.user?.sub ?? '');
         if (!buyerProfile) {
             res.status(403).json({ error: 'Buyer profile required' });
             return;
@@ -55,7 +55,7 @@ function createPackagesRouter(context) {
         res.status(201).json(purchase);
     });
     router.get('/packages/me', (req, res) => {
-        const buyerProfile = Array.from(context.store.buyerProfiles.values()).find((profile) => profile.userId === req.user?.sub);
+        const buyerProfile = context.store.findBuyerProfileByUserId(req.user?.sub ?? '');
         if (!buyerProfile) {
             res.status(403).json({ error: 'Buyer profile required' });
             return;
@@ -76,8 +76,10 @@ function createPackagesRouter(context) {
         purchase.usedSessions += 1;
         purchase.status = purchase.usedSessions >= purchase.totalSessions ? 'EXHAUSTED' : purchase.status;
         purchase.updatedAt = new Date();
-        booking.packagePurchaseId = purchase.id;
-        booking.payoutStatus = 'PACKAGE_APPLIED';
+        booking.requestDetails = {
+            ...(booking.requestDetails ?? {}),
+            packagePurchaseId: purchase.id,
+        };
         booking.updatedAt = new Date();
         context.store.packagePurchases.set(purchase.id, purchase);
         context.store.bookings.set(booking.id, booking);

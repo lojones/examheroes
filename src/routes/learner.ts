@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { authenticate, parseDate, type AuthenticatedRequest } from '../kernel/common';
+import { type JsonValue } from '../types/marketmesh';
 import { type ReturnTypeContext } from './shared';
 
 export function createLearnerRouter(context: ReturnTypeContext) {
@@ -34,7 +35,7 @@ export function createLearnerRouter(context: ReturnTypeContext) {
       weakTopics: body.weakTopics ?? existing?.weakTopics ?? [],
       budget: body.budget ?? existing?.budget,
       timezone: body.timezone ?? existing?.timezone ?? 'UTC',
-      learningPreferences: body.learningPreferences ?? existing?.learningPreferences ?? {},
+      learningPreferences: (body.learningPreferences ?? existing?.learningPreferences ?? {}) as JsonValue,
       integrityAttestationId: body.integrityAttestationId ?? existing?.integrityAttestationId,
       createdAt: existing?.createdAt ?? new Date(),
       updatedAt: new Date(),

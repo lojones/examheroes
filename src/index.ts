@@ -26,7 +26,7 @@ app.use(helmet());
 app.use(cors());
 app.use(express.json({ limit: '2mb' }));
 
-context.kernel.mountOn(app, '/api/v1');
+app.use('/api/v1', context.kernel.getRouter());
 app.use('/api/v1', createExamsRouter(context));
 app.use('/api/v1', createHeroesRouter(context));
 app.use('/api/v1', createVerificationRouter(context));

@@ -1,11 +1,10 @@
 import { Router } from 'express';
 import { authenticate, requireRole, type AuthenticatedRequest } from '../kernel/common';
 import { type ReturnTypeContext } from './shared';
-import { UserRole } from '../types/marketmesh';
 
 export function createAdminHostRouter(context: ReturnTypeContext) {
   const router = Router();
-  router.use('/admin', authenticate(context.config), requireRole([UserRole.ADMIN, UserRole.MODERATOR]));
+  router.use('/admin', authenticate(context.config), requireRole(['ADMIN']));
 
   router.post('/admin/hero-review/:sellerProfileId/approve', (req: AuthenticatedRequest, res) => {
     res.json(context.services.heroVerificationService.approveHero(req.params.sellerProfileId, req.user!.sub));

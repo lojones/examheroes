@@ -1,5 +1,3 @@
-import type { Express, Router } from 'express';
-
 export type JsonValue =
   | string
   | number
@@ -8,28 +6,176 @@ export type JsonValue =
   | JsonValue[]
   | { [key: string]: JsonValue };
 
-export enum UserRole {
-  LEARNER = 'LEARNER',
-  HERO = 'HERO',
-  ADMIN = 'ADMIN',
-  MODERATOR = 'MODERATOR',
+export type Role = 'BUYER' | 'SELLER' | 'ADMIN';
+export type VerificationStatus = 'PENDING' | 'VERIFIED' | 'REJECTED';
+export type PricingType = 'FIXED' | 'HOURLY' | 'NEGOTIABLE';
+export type LocationType = 'REMOTE' | 'ONSITE' | 'BOTH';
+export type BookingType = 'DIRECT' | 'REQUEST';
+export type BookingStatus = 'PENDING' | 'ACCEPTED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED' | 'DISPUTED';
+export type PayoutStatus = 'PENDING' | 'HOLD' | 'CAPTURED' | 'PAID' | 'REFUNDED';
+export type ReviewRole = 'BUYER' | 'SELLER';
+
+export interface User {
+  id: string;
+  email: string;
+  passwordHash: string;
+  salt: string;
+  phone?: string;
+  avatarUrl?: string;
+  isAdmin: boolean;
+  roles: Role[];
+  createdAt: Date;
+  updatedAt: Date;
 }
 
-export enum BookingStatus {
-  PENDING = 'PENDING',
-  ACCEPTED = 'ACCEPTED',
-  IN_PROGRESS = 'IN_PROGRESS',
-  COMPLETED = 'COMPLETED',
-  CANCELLED = 'CANCELLED',
-  DISPUTED = 'DISPUTED',
+export interface BuyerProfile {
+  id: string;
+  userId: string;
+  preferences?: Record<string, unknown>;
 }
 
-export enum VerificationStatus {
-  PENDING = 'PENDING',
-  APPROVED = 'APPROVED',
-  SUSPENDED = 'SUSPENDED',
-  VERIFIED = 'VERIFIED',
-  REJECTED = 'REJECTED',
+export interface SellerProfile {
+  id: string;
+  userId: string;
+  bio?: string;
+  verificationStatus: VerificationStatus;
+  stripeConnectAccountId?: string;
+  averageRating: number;
+  reviewCount: number;
+  location?: Record<string, unknown>;
+  radiusKm: number;
+  isOnline: boolean;
+}
+
+export interface Category {
+  id: string;
+  slug: string;
+  name: string;
+  description?: string;
+  metadataSchema?: Record<string, unknown>;
+  isActive: boolean;
+}
+
+export interface ServiceListing {
+  id: string;
+  sellerId: string;
+  categoryId: string;
+  title: string;
+  description: string;
+  price: number;
+  currency: string;
+  pricingType: PricingType;
+  durationMinutes: number;
+  locationType: LocationType;
+  location?: Record<string, unknown>;
+  mediaUrls: string[];
+  isActive: boolean;
+  createdAt: Date;
+}
+
+export interface AvailabilitySlot {
+  id: string;
+  sellerId: string;
+  startTime: Date;
+  endTime: Date;
+  isBooked: boolean;
+  recurringRule?: Record<string, unknown>;
+}
+
+export interface Booking {
+  id: string;
+  bookingType: BookingType;
+  status: BookingStatus;
+  buyerId: string;
+  sellerId: string;
+  serviceId?: string;
+  categoryId: string;
+  requestDetails?: Record<string, unknown>;
+  finalPrice?: number;
+  platformFeePercent: number;
+  platformFeeAmount?: number;
+  sellerPayoutAmount?: number;
+  stripePaymentIntentId?: string;
+  payoutStatus: PayoutStatus;
+  startTime?: Date;
+  endTime?: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface Review {
+  id: string;
+  bookingId: string;
+  authorId: string;
+  recipientId: string;
+  role: ReviewRole;
+  rating: number;
+  comment?: string;
+  createdAt: Date;
+}
+
+export interface Conversation {
+  id: string;
+  bookingId: string;
+  createdAt: Date;
+}
+
+export interface Message {
+  id: string;
+  conversationId: string;
+  senderId: string;
+  content: string;
+  attachments: string[];
+  createdAt: Date;
+  readAt?: Date;
+}
+
+export interface MarketMeshConfig {
+  platformFeePercent: number;
+  defaultCurrency: string;
+  categories: string[];
+  jwtSecret: string;
+  accessTokenTtlSeconds?: number;
+  refreshTokenTtlSeconds?: number;
+}
+
+export interface MarketMeshHooks {
+  beforeSellerActivation?: (sellerId: string) => Promise<void> | void;
+  overrideMatchScore?: (sellerId: string, request: Record<string, unknown>) => Promise<number> | number;
+  onBookingCreated?: (booking: Booking) => Promise<void> | void;
+  onPaymentCaptured?: (booking: Booking) => Promise<void> | void;
+  extendBookingPayload?: (booking: Booking) => Promise<Record<string, unknown>> | Record<string, unknown>;
+  customizeSellerOnboarding?: (sellerId: string) => Promise<Record<string, unknown>> | Record<string, unknown>;
+}
+
+export interface MarketMeshKernelOptions {
+  config: MarketMeshConfig;
+  hooks?: MarketMeshHooks;
+}
+
+export interface Notification {
+  id: string;
+  userId: string;
+  type: string;
+  data: Record<string, unknown>;
+  createdAt: Date;
+  readAt?: Date;
+}
+
+export interface PlatformConfigEntry {
+  id: string;
+  key: string;
+  value: JsonValue;
+  updatedAt: Date;
+}
+
+export interface StripeEventRecord {
+  id: string;
+  eventId: string;
+  eventType: string;
+  processed: boolean;
+  processedAt?: Date;
+  createdAt: Date;
 }
 
 export type DiagnosticAttemptStatus = 'IN_PROGRESS' | 'COMPLETED';
@@ -38,150 +184,6 @@ export type ContentUploadStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'FLAGGED
 export type TutoringSessionStatus = 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
 export type PackagePurchaseStatus = 'ACTIVE' | 'EXPIRED' | 'EXHAUSTED';
 export type IntegrityReportStatus = 'OPEN' | 'INVESTIGATING' | 'RESOLVED' | 'DISMISSED';
-
-export interface User {
-  id: string;
-  email: string;
-  passwordHash: string;
-  role: UserRole;
-  emailVerified: boolean;
-  mfaEnabled: boolean;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-export interface BuyerProfile {
-  id: string;
-  userId: string;
-  displayName: string;
-  timezone: string;
-  bio?: string;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-export interface SellerProfile {
-  id: string;
-  userId: string;
-  displayName: string;
-  bio?: string;
-  verificationStatus: VerificationStatus;
-  payoutSetup: boolean;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-export interface Category {
-  id: string;
-  slug: string;
-  name: string;
-  examFamily: string;
-  sections: string[];
-  scoreScale: string;
-  serviceTypes: string[];
-  materialPolicy: string;
-  prohibitsLiveExamHelp: boolean;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-export interface ServiceListing {
-  id: string;
-  sellerProfileId: string;
-  categoryId: string;
-  title: string;
-  description: string;
-  serviceType: string;
-  priceAmount: number;
-  currency: string;
-  durationMinutes: number;
-  isActive: boolean;
-  examSlug: string;
-  sections: string[];
-  topics: string[];
-  prerequisitesSummary?: string;
-  allowedMaterialsSummary?: string;
-  recordingPolicy?: string;
-  homeworkPolicy?: string;
-  packagePlanId?: string;
-  cohortClassId?: string;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-export interface AvailabilitySlot {
-  id: string;
-  sellerProfileId: string;
-  startTime: Date;
-  endTime: Date;
-  isBooked: boolean;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-export interface Booking {
-  id: string;
-  buyerProfileId: string;
-  sellerProfileId: string;
-  serviceListingId: string;
-  availabilitySlotId: string;
-  status: BookingStatus;
-  finalPrice: number;
-  platformFeePercent: number;
-  platformFeeAmount: number;
-  sellerPayoutAmount: number;
-  payoutStatus?: string;
-  notes?: string;
-  packagePurchaseId?: string;
-  contentUploadIds?: string[];
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-export interface Conversation {
-  id: string;
-  bookingId: string;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-export interface Message {
-  id: string;
-  conversationId: string;
-  authorUserId: string;
-  body: string;
-  flagged: boolean;
-  createdAt: Date;
-}
-
-export interface Review {
-  id: string;
-  bookingId: string;
-  authorUserId: string;
-  targetSellerProfileId: string;
-  rating: number;
-  body?: string;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-export interface PlatformConfig {
-  id: string;
-  platformFeePercent: number;
-  defaultCurrency: string;
-  accessTokenTtl: number;
-  refreshTokenTtl: number;
-  updatedAt: Date;
-}
-
-export interface StripeEvent {
-  id: string;
-  eventId: string;
-  eventType: string;
-  processed: boolean;
-  processedAt?: Date;
-  createdAt: Date;
-}
 
 export interface ExamProgram {
   id: string;
@@ -546,44 +548,16 @@ export interface OutcomeSnapshot {
   createdAt: Date;
 }
 
-export interface MarketMeshCategoryConfig {
-  slug: string;
-  name: string;
-  examFamily: string;
-  sections: string[];
-  scoreScale: string;
-  serviceTypes: string[];
-  materialPolicy: string;
-  prohibitsLiveExamHelp: boolean;
-}
-
-export interface MarketMeshConfig {
-  platformFeePercent: number;
-  defaultCurrency: string;
-  accessTokenTtl: number;
-  refreshTokenTtl: number;
-  jwtSecret: string;
-  categories: MarketMeshCategoryConfig[];
-}
-
 export interface BookingRequestInput {
-  buyerProfileId: string;
-  sellerProfileId: string;
-  serviceListingId: string;
-  availabilitySlotId: string;
-  requestDescription?: string;
-  examProgramId?: string;
+  buyerId: string;
+  sellerId: string;
+  serviceId: string;
+  categoryId: string;
+  startTime?: Date;
+  endTime?: Date;
+  requestDetails?: Record<string, unknown>;
   packagePurchaseId?: string;
   contentUploadIds?: string[];
-}
-
-export interface MarketMeshHooks {
-  beforeSellerActivation?: (sellerProfile: SellerProfile, store: MarketMeshStore) => Promise<unknown>;
-  customizeSellerOnboarding?: (sellerProfile: SellerProfile, store: MarketMeshStore) => Promise<unknown>;
-  beforeBooking?: (bookingInput: BookingRequestInput, store: MarketMeshStore) => Promise<{ allowed: boolean; reasons: string[] }>;
-  onBookingCreated?: (booking: Booking, store: MarketMeshStore) => Promise<void>;
-  extendBookingPayload?: (booking: Booking, store: MarketMeshStore) => Promise<unknown>;
-  onPaymentCaptured?: (booking: Booking, store: MarketMeshStore) => Promise<void>;
 }
 
 export interface MarketMeshStore {
@@ -591,15 +565,15 @@ export interface MarketMeshStore {
   buyerProfiles: Map<string, BuyerProfile>;
   sellerProfiles: Map<string, SellerProfile>;
   categories: Map<string, Category>;
-  serviceListings: Map<string, ServiceListing>;
+  services: Map<string, ServiceListing>;
   availabilitySlots: Map<string, AvailabilitySlot>;
   bookings: Map<string, Booking>;
+  reviews: Map<string, Review>;
   conversations: Map<string, Conversation>;
   messages: Map<string, Message>;
-  reviews: Map<string, Review>;
-  stripeEvents: Map<string, StripeEvent>;
-  platformConfig: PlatformConfig;
-  refreshTokens: Map<string, { userId: string; expiresAt: number }>;
+  notifications: Map<string, Notification>;
+  platformConfig: Map<string, PlatformConfigEntry>;
+  stripeEvents: Map<string, StripeEventRecord>;
   examPrograms: Map<string, ExamProgram>;
   examSections: Map<string, ExamSection>;
   examTopics: Map<string, ExamTopic>;
@@ -628,10 +602,11 @@ export interface MarketMeshStore {
   integrityReports: Map<string, IntegrityReport>;
   moderationActions: Map<string, ModerationAction>;
   outcomeSnapshots: Map<string, OutcomeSnapshot>;
-}
-
-export interface MarketMeshKernelContract {
-  mountOn(app: Express, basePath?: string): void;
-  getRouter(): Router;
-  getStore(): MarketMeshStore;
+  id(): string;
+  now(): Date;
+  findUserByEmail(email: string): User | undefined;
+  findBuyerProfileByUserId(userId: string): BuyerProfile | undefined;
+  findSellerProfileByUserId(userId: string): SellerProfile | undefined;
+  findCategoryBySlug(slug: string): Category | undefined;
+  ensureUserRole(userId: string, role: Role): void;
 }

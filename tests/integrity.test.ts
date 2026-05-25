@@ -34,17 +34,19 @@ describe('integrity services', () => {
 
   it('IntegrityModerationService.canBookingProceed should fail if learner has not attested', () => {
     const seeded = createSeededContext();
-    seeded.context.store.integrityAttestations = new Map(
+    const filtered = new Map(
       Array.from(seeded.context.store.integrityAttestations.entries()).filter(([, attestation]) => attestation.userId !== seeded.buyerUser.id),
     );
+    (seeded.context.store as { integrityAttestations: typeof filtered }).integrityAttestations = filtered;
     const moderation = new IntegrityModerationService(seeded.context.store, new ContentPolicyService());
     const result = moderation.canBookingProceed({
-      buyerProfileId: seeded.buyerProfile.id,
-      sellerProfileId: seeded.sellerProfile.id,
-      serviceListingId: seeded.serviceListing.id,
-      availabilitySlotId: seeded.availabilitySlot.id,
-      requestDescription: 'Need help improving logic games accuracy',
-      examProgramId: seeded.examProgram.id,
+      buyerId: seeded.buyerProfile.id,
+      sellerId: seeded.sellerProfile.id,
+      serviceId: seeded.serviceListing.id,
+      categoryId: seeded.category.id,
+      startTime: seeded.availabilitySlot.startTime,
+      endTime: seeded.availabilitySlot.endTime,
+      requestDetails: { requestDescription: 'Need help improving logic games accuracy' },
     });
     expect(result.allowed).toBe(false);
     expect(result.reasons).toContain('Learner has not attested to the current integrity policy');

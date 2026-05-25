@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
-import { type MarketMeshStore, VerificationStatus } from '../types/marketmesh';
+import { type MarketMeshStore } from '../types/marketmesh';
 
 export class HeroVerificationService {
   constructor(private readonly store: MarketMeshStore) {}
@@ -32,7 +32,7 @@ export class HeroVerificationService {
       id: existing?.id ?? uuidv4(),
       sellerProfileId,
       examProgramId,
-      verificationStatus: VerificationStatus.PENDING,
+      verificationStatus: 'PENDING' as const,
       scoreEvidence: evidence.scoreEvidence,
       certificationEvidence: evidence.certificationEvidence,
       approvedAt: existing?.approvedAt,
@@ -49,12 +49,11 @@ export class HeroVerificationService {
     if (!seller) {
       throw new Error('Seller not found');
     }
-    seller.verificationStatus = VerificationStatus.APPROVED;
-    seller.updatedAt = new Date();
+    seller.verificationStatus = 'VERIFIED';
     this.store.sellerProfiles.set(seller.id, seller);
     for (const expertise of this.store.heroExamExpertise.values()) {
       if (expertise.sellerProfileId === sellerProfileId) {
-        expertise.verificationStatus = VerificationStatus.VERIFIED;
+        expertise.verificationStatus = 'VERIFIED';
         expertise.approvedAt = new Date();
         expertise.approvedBy = adminId;
         expertise.updatedAt = new Date();
@@ -69,20 +68,19 @@ export class HeroVerificationService {
     if (!seller) {
       throw new Error('Seller not found');
     }
-    seller.verificationStatus = VerificationStatus.SUSPENDED;
-    seller.bio = [seller.bio, `Suspended by ${adminId}: ${reason}`].filter(Boolean).join(' | ');
-    seller.updatedAt = new Date();
+    seller.verificationStatus = 'REJECTED';
+    seller.bio = [seller.bio, `Rejected by ${adminId}: ${reason}`].filter(Boolean).join(' | ');
     this.store.sellerProfiles.set(seller.id, seller);
     return seller;
   }
 
   isHeroVerifiedForExam(sellerProfileId: string, examProgramId: string): boolean {
     const seller = this.store.sellerProfiles.get(sellerProfileId);
-    if (!seller || seller.verificationStatus !== VerificationStatus.APPROVED) {
+    if (!seller || seller.verificationStatus !== 'VERIFIED') {
       return false;
     }
     return Array.from(this.store.heroExamExpertise.values()).some(
-      (item) => item.sellerProfileId === sellerProfileId && item.examProgramId === examProgramId && item.verificationStatus === VerificationStatus.VERIFIED,
+      (item) => item.sellerProfileId === sellerProfileId && item.examProgramId === examProgramId && item.verificationStatus === 'VERIFIED',
     );
   }
 

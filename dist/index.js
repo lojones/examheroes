@@ -30,7 +30,7 @@ exports.context = context;
 app.use((0, helmet_1.default)());
 app.use((0, cors_1.default)());
 app.use(express_1.default.json({ limit: '2mb' }));
-context.kernel.mountOn(app, '/api/v1');
+app.use('/api/v1', context.kernel.getRouter());
 app.use('/api/v1', (0, exams_1.createExamsRouter)(context));
 app.use('/api/v1', (0, heroes_1.createHeroesRouter)(context));
 app.use('/api/v1', (0, verification_1.createVerificationRouter)(context));

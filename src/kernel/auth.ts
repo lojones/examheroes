@@ -1,21 +1,25 @@
 import bcrypt from 'bcryptjs';
 import { Router } from 'express';
-import { v4 as uuidv4 } from 'uuid';
 import { signToken, verifyToken } from './common';
 import { type KernelContext } from './index';
-import { UserRole, VerificationStatus } from '../types/marketmesh';
+import type { Role } from '../types/marketmesh';
 
 export function createAuthRouter({ config, hooks, store }: KernelContext) {
   const router = Router();
+  const accessTtl = config.accessTokenTtlSeconds ?? 900;
+  const refreshTtl = config.refreshTokenTtlSeconds ?? 604800;
 
   router.post('/auth/register', async (req, res) => {
-    const { email, password, asBuyer, asSeller, displayName, timezone } = req.body as {
+    const { email, password, asBuyer, asSeller, displayName, timezone, bio, phone, avatarUrl } = req.body as {
       email?: string;
       password?: string;
       asBuyer?: boolean;
       asSeller?: boolean;
       displayName?: string;
       timezone?: string;
+      bio?: string;
+      phone?: string;
+      avatarUrl?: string;
     };
 
     if (!email || !password) {
@@ -23,21 +27,30 @@ export function createAuthRouter({ config, hooks, store }: KernelContext) {
       return;
     }
 
-    const existing = Array.from(store.users.values()).find((user) => user.email.toLowerCase() === email.toLowerCase());
-    if (existing) {
+    if (store.findUserByEmail(email)) {
       res.status(409).json({ error: 'User already exists' });
       return;
     }
 
-    const now = new Date();
-    const role = asSeller ? UserRole.HERO : UserRole.LEARNER;
+    const now = store.now();
+    const roles: Role[] = [];
+    if (asBuyer !== false) {
+      roles.push('BUYER');
+    }
+    if (asSeller) {
+      roles.push('SELLER');
+    }
+
+    const salt = await bcrypt.genSalt(10);
     const user = {
-      id: uuidv4(),
+      id: store.id(),
       email,
-      passwordHash: await bcrypt.hash(password, 10),
-      role,
-      emailVerified: false,
-      mfaEnabled: false,
+      passwordHash: await bcrypt.hash(password, salt),
+      salt,
+      phone,
+      avatarUrl,
+      isAdmin: false,
+      roles,
       createdAt: now,
       updatedAt: now,
     };
@@ -45,41 +58,45 @@ export function createAuthRouter({ config, hooks, store }: KernelContext) {
 
     let buyerProfile;
     let sellerProfile;
-    if (asBuyer) {
+    let onboarding;
+
+    if (roles.includes('BUYER')) {
       buyerProfile = {
-        id: uuidv4(),
+        id: store.id(),
         userId: user.id,
-        displayName: displayName ?? email.split('@')[0],
-        timezone: timezone ?? 'UTC',
-        bio: undefined,
-        createdAt: now,
-        updatedAt: now,
+        preferences: {
+          displayName: displayName ?? email.split('@')[0],
+          timezone: timezone ?? 'UTC',
+        },
       };
       store.buyerProfiles.set(buyerProfile.id, buyerProfile);
     }
-    if (asSeller) {
+
+    if (roles.includes('SELLER')) {
       sellerProfile = {
-        id: uuidv4(),
+        id: store.id(),
         userId: user.id,
-        displayName: displayName ?? email.split('@')[0],
-        bio: undefined,
-        verificationStatus: VerificationStatus.PENDING,
-        payoutSetup: false,
-        createdAt: now,
-        updatedAt: now,
+        bio,
+        verificationStatus: 'PENDING' as const,
+        stripeConnectAccountId: undefined,
+        averageRating: 0,
+        reviewCount: 0,
+        location: timezone ? { timezone } : undefined,
+        radiusKm: 0,
+        isOnline: false,
       };
       store.sellerProfiles.set(sellerProfile.id, sellerProfile);
-      await hooks.customizeSellerOnboarding?.(sellerProfile, store);
+      onboarding = await hooks.customizeSellerOnboarding?.(sellerProfile.id);
     }
 
-    const accessToken = signToken(config, { sub: user.id, role: user.role, email: user.email, type: 'access' }, config.accessTokenTtl);
-    const refreshToken = signToken(config, { sub: user.id, role: user.role, email: user.email, type: 'refresh' }, config.refreshTokenTtl);
-    store.refreshTokens.set(refreshToken, { userId: user.id, expiresAt: Date.now() + config.refreshTokenTtl * 1000 });
+    const accessToken = signToken(config, { sub: user.id, email: user.email, roles: user.roles, isAdmin: user.isAdmin, type: 'access' }, accessTtl);
+    const refreshToken = signToken(config, { sub: user.id, email: user.email, roles: user.roles, isAdmin: user.isAdmin, type: 'refresh' }, refreshTtl);
 
     res.status(201).json({
-      user: { ...user, passwordHash: undefined },
+      user: { ...user, passwordHash: undefined, salt: undefined },
       buyerProfile,
       sellerProfile,
+      onboarding,
       accessToken,
       refreshToken,
     });
@@ -87,21 +104,20 @@ export function createAuthRouter({ config, hooks, store }: KernelContext) {
 
   router.post('/auth/login', async (req, res) => {
     const { email, password } = req.body as { email?: string; password?: string };
-    const user = Array.from(store.users.values()).find((item) => item.email.toLowerCase() === email?.toLowerCase());
+    const user = email ? store.findUserByEmail(email) : undefined;
     if (!user || !password || !(await bcrypt.compare(password, user.passwordHash))) {
       res.status(401).json({ error: 'Invalid credentials' });
       return;
     }
 
-    const accessToken = signToken(config, { sub: user.id, role: user.role, email: user.email, type: 'access' }, config.accessTokenTtl);
-    const refreshToken = signToken(config, { sub: user.id, role: user.role, email: user.email, type: 'refresh' }, config.refreshTokenTtl);
-    store.refreshTokens.set(refreshToken, { userId: user.id, expiresAt: Date.now() + config.refreshTokenTtl * 1000 });
+    const accessToken = signToken(config, { sub: user.id, email: user.email, roles: user.roles, isAdmin: user.isAdmin, type: 'access' }, accessTtl);
+    const refreshToken = signToken(config, { sub: user.id, email: user.email, roles: user.roles, isAdmin: user.isAdmin, type: 'refresh' }, refreshTtl);
     res.json({ accessToken, refreshToken });
   });
 
   router.post('/auth/refresh', (req, res) => {
     const { refreshToken } = req.body as { refreshToken?: string };
-    if (!refreshToken || !store.refreshTokens.has(refreshToken)) {
+    if (!refreshToken) {
       res.status(401).json({ error: 'Invalid refresh token' });
       return;
     }
@@ -116,7 +132,7 @@ export function createAuthRouter({ config, hooks, store }: KernelContext) {
         res.status(404).json({ error: 'User not found' });
         return;
       }
-      const accessToken = signToken(config, { sub: user.id, role: user.role, email: user.email, type: 'access' }, config.accessTokenTtl);
+      const accessToken = signToken(config, { sub: user.id, email: user.email, roles: user.roles, isAdmin: user.isAdmin, type: 'access' }, accessTtl);
       res.json({ accessToken });
     } catch {
       res.status(401).json({ error: 'Invalid refresh token' });

@@ -1,22 +1,26 @@
-import { Router, type Express } from 'express';
-import { type MarketMeshConfig, type MarketMeshHooks, type MarketMeshStore } from '../types/marketmesh';
+import express, { Router } from 'express';
+import { InMemoryMarketMeshStore } from './store';
+import type { MarketMeshConfig, MarketMeshHooks, MarketMeshKernelOptions } from '../types/marketmesh';
 export interface KernelContext {
     config: MarketMeshConfig;
     hooks: MarketMeshHooks;
-    store: MarketMeshStore;
+    store: InMemoryMarketMeshStore;
+}
+interface RouterModule {
+    router: Router;
 }
 export declare class MarketMeshKernel {
+    readonly store: InMemoryMarketMeshStore;
+    readonly auth: RouterModule;
+    readonly platform: RouterModule;
+    readonly marketplace: RouterModule;
+    readonly bookings: RouterModule;
+    readonly payments: RouterModule;
     private readonly router;
     private readonly context;
-    constructor({ config, hooks, store }: {
-        config: MarketMeshConfig;
-        hooks: MarketMeshHooks;
-        store?: MarketMeshStore;
-    });
-    private mountRoutes;
-    mountOn(app: Express, basePath?: string): void;
+    constructor(options: MarketMeshKernelOptions);
     getRouter(): Router;
-    getStore(): MarketMeshStore;
-    getContext(): KernelContext;
+    createApp(prefix?: string): express.Express;
 }
+export {};
 //# sourceMappingURL=index.d.ts.map

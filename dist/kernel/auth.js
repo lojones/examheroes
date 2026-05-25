@@ -6,89 +6,98 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.createAuthRouter = createAuthRouter;
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const express_1 = require("express");
-const uuid_1 = require("uuid");
 const common_1 = require("./common");
-const marketmesh_1 = require("../types/marketmesh");
 function createAuthRouter({ config, hooks, store }) {
     const router = (0, express_1.Router)();
+    const accessTtl = config.accessTokenTtlSeconds ?? 900;
+    const refreshTtl = config.refreshTokenTtlSeconds ?? 604800;
     router.post('/auth/register', async (req, res) => {
-        const { email, password, asBuyer, asSeller, displayName, timezone } = req.body;
+        const { email, password, asBuyer, asSeller, displayName, timezone, bio, phone, avatarUrl } = req.body;
         if (!email || !password) {
             res.status(400).json({ error: 'Email and password are required' });
             return;
         }
-        const existing = Array.from(store.users.values()).find((user) => user.email.toLowerCase() === email.toLowerCase());
-        if (existing) {
+        if (store.findUserByEmail(email)) {
             res.status(409).json({ error: 'User already exists' });
             return;
         }
-        const now = new Date();
-        const role = asSeller ? marketmesh_1.UserRole.HERO : marketmesh_1.UserRole.LEARNER;
+        const now = store.now();
+        const roles = [];
+        if (asBuyer !== false) {
+            roles.push('BUYER');
+        }
+        if (asSeller) {
+            roles.push('SELLER');
+        }
+        const salt = await bcryptjs_1.default.genSalt(10);
         const user = {
-            id: (0, uuid_1.v4)(),
+            id: store.id(),
             email,
-            passwordHash: await bcryptjs_1.default.hash(password, 10),
-            role,
-            emailVerified: false,
-            mfaEnabled: false,
+            passwordHash: await bcryptjs_1.default.hash(password, salt),
+            salt,
+            phone,
+            avatarUrl,
+            isAdmin: false,
+            roles,
             createdAt: now,
             updatedAt: now,
         };
         store.users.set(user.id, user);
         let buyerProfile;
         let sellerProfile;
-        if (asBuyer) {
+        let onboarding;
+        if (roles.includes('BUYER')) {
             buyerProfile = {
-                id: (0, uuid_1.v4)(),
+                id: store.id(),
                 userId: user.id,
-                displayName: displayName ?? email.split('@')[0],
-                timezone: timezone ?? 'UTC',
-                bio: undefined,
-                createdAt: now,
-                updatedAt: now,
+                preferences: {
+                    displayName: displayName ?? email.split('@')[0],
+                    timezone: timezone ?? 'UTC',
+                },
             };
             store.buyerProfiles.set(buyerProfile.id, buyerProfile);
         }
-        if (asSeller) {
+        if (roles.includes('SELLER')) {
             sellerProfile = {
-                id: (0, uuid_1.v4)(),
+                id: store.id(),
                 userId: user.id,
-                displayName: displayName ?? email.split('@')[0],
-                bio: undefined,
-                verificationStatus: marketmesh_1.VerificationStatus.PENDING,
-                payoutSetup: false,
-                createdAt: now,
-                updatedAt: now,
+                bio,
+                verificationStatus: 'PENDING',
+                stripeConnectAccountId: undefined,
+                averageRating: 0,
+                reviewCount: 0,
+                location: timezone ? { timezone } : undefined,
+                radiusKm: 0,
+                isOnline: false,
             };
             store.sellerProfiles.set(sellerProfile.id, sellerProfile);
-            await hooks.customizeSellerOnboarding?.(sellerProfile, store);
+            onboarding = await hooks.customizeSellerOnboarding?.(sellerProfile.id);
         }
-        const accessToken = (0, common_1.signToken)(config, { sub: user.id, role: user.role, email: user.email, type: 'access' }, config.accessTokenTtl);
-        const refreshToken = (0, common_1.signToken)(config, { sub: user.id, role: user.role, email: user.email, type: 'refresh' }, config.refreshTokenTtl);
-        store.refreshTokens.set(refreshToken, { userId: user.id, expiresAt: Date.now() + config.refreshTokenTtl * 1000 });
+        const accessToken = (0, common_1.signToken)(config, { sub: user.id, email: user.email, roles: user.roles, isAdmin: user.isAdmin, type: 'access' }, accessTtl);
+        const refreshToken = (0, common_1.signToken)(config, { sub: user.id, email: user.email, roles: user.roles, isAdmin: user.isAdmin, type: 'refresh' }, refreshTtl);
         res.status(201).json({
-            user: { ...user, passwordHash: undefined },
+            user: { ...user, passwordHash: undefined, salt: undefined },
             buyerProfile,
             sellerProfile,
+            onboarding,
             accessToken,
             refreshToken,
         });
     });
     router.post('/auth/login', async (req, res) => {
         const { email, password } = req.body;
-        const user = Array.from(store.users.values()).find((item) => item.email.toLowerCase() === email?.toLowerCase());
+        const user = email ? store.findUserByEmail(email) : undefined;
         if (!user || !password || !(await bcryptjs_1.default.compare(password, user.passwordHash))) {
             res.status(401).json({ error: 'Invalid credentials' });
             return;
         }
-        const accessToken = (0, common_1.signToken)(config, { sub: user.id, role: user.role, email: user.email, type: 'access' }, config.accessTokenTtl);
-        const refreshToken = (0, common_1.signToken)(config, { sub: user.id, role: user.role, email: user.email, type: 'refresh' }, config.refreshTokenTtl);
-        store.refreshTokens.set(refreshToken, { userId: user.id, expiresAt: Date.now() + config.refreshTokenTtl * 1000 });
+        const accessToken = (0, common_1.signToken)(config, { sub: user.id, email: user.email, roles: user.roles, isAdmin: user.isAdmin, type: 'access' }, accessTtl);
+        const refreshToken = (0, common_1.signToken)(config, { sub: user.id, email: user.email, roles: user.roles, isAdmin: user.isAdmin, type: 'refresh' }, refreshTtl);
         res.json({ accessToken, refreshToken });
     });
     router.post('/auth/refresh', (req, res) => {
         const { refreshToken } = req.body;
-        if (!refreshToken || !store.refreshTokens.has(refreshToken)) {
+        if (!refreshToken) {
             res.status(401).json({ error: 'Invalid refresh token' });
             return;
         }
@@ -102,7 +111,7 @@ function createAuthRouter({ config, hooks, store }) {
                 res.status(404).json({ error: 'User not found' });
                 return;
             }
-            const accessToken = (0, common_1.signToken)(config, { sub: user.id, role: user.role, email: user.email, type: 'access' }, config.accessTokenTtl);
+            const accessToken = (0, common_1.signToken)(config, { sub: user.id, email: user.email, roles: user.roles, isAdmin: user.isAdmin, type: 'access' }, accessTtl);
             res.json({ accessToken });
         }
         catch {

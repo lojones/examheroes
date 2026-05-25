@@ -3,32 +3,44 @@ export declare class NotificationService {
     private readonly store;
     constructor(store: MarketMeshStore);
     notify(userId: string, type: string, data: Record<string, unknown>): {
-        delivered: boolean;
+        timestamp: string;
+        id: string;
         userId: string;
         type: string;
         data: Record<string, unknown>;
-        timestamp: string;
+        createdAt: Date;
+        readAt: undefined;
+        delivered: boolean;
     };
     notifyBookingCreated(booking: Booking): {
-        delivered: boolean;
+        timestamp: string;
+        id: string;
         userId: string;
         type: string;
         data: Record<string, unknown>;
-        timestamp: string;
+        createdAt: Date;
+        readAt: undefined;
+        delivered: boolean;
     }[];
     notifySessionReminder(session: TutoringSession): {
-        delivered: boolean;
+        timestamp: string;
+        id: string;
         userId: string;
         type: string;
         data: Record<string, unknown>;
-        timestamp: string;
+        createdAt: Date;
+        readAt: undefined;
+        delivered: boolean;
     };
     notifyPaymentCaptured(booking: Booking): {
-        delivered: boolean;
+        timestamp: string;
+        id: string;
         userId: string;
         type: string;
         data: Record<string, unknown>;
-        timestamp: string;
+        createdAt: Date;
+        readAt: undefined;
+        delivered: boolean;
     };
 }
 //# sourceMappingURL=NotificationService.d.ts.map

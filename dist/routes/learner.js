@@ -24,7 +24,7 @@ function createLearnerRouter(context) {
             weakTopics: body.weakTopics ?? existing?.weakTopics ?? [],
             budget: body.budget ?? existing?.budget,
             timezone: body.timezone ?? existing?.timezone ?? 'UTC',
-            learningPreferences: body.learningPreferences ?? existing?.learningPreferences ?? {},
+            learningPreferences: (body.learningPreferences ?? existing?.learningPreferences ?? {}),
             integrityAttestationId: body.integrityAttestationId ?? existing?.integrityAttestationId,
             createdAt: existing?.createdAt ?? new Date(),
             updatedAt: new Date(),

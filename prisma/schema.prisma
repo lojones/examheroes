@@ -7,19 +7,22 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum UserRole {
-  LEARNER
-  HERO
+// ─── MarketMesh role types ────────────────────────────────────────────────────
+enum Role {
+  BUYER
+  SELLER
   ADMIN
-  MODERATOR
 }
 
 enum VerificationStatus {
   PENDING
-  APPROVED
-  SUSPENDED
   VERIFIED
   REJECTED
+}
+
+enum BookingType {
+  DIRECT
+  REQUEST
 }
 
 enum BookingStatus {
@@ -30,6 +33,33 @@ enum BookingStatus {
   CANCELLED
   DISPUTED
 }
+
+enum PayoutStatus {
+  PENDING
+  HOLD
+  CAPTURED
+  PAID
+  REFUNDED
+}
+
+enum PricingType {
+  FIXED
+  HOURLY
+  NEGOTIABLE
+}
+
+enum LocationType {
+  REMOTE
+  ONSITE
+  BOTH
+}
+
+enum ReviewRole {
+  BUYER
+  SELLER
+}
+
+// ─── App-specific enum types ──────────────────────────────────────────────────
 
 enum DiagnosticAttemptStatus {
   IN_PROGRESS
@@ -70,147 +100,172 @@ enum IntegrityReportStatus {
   DISMISSED
 }
 
+// ─── MarketMesh core models ───────────────────────────────────────────────────
+
 model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  salt         String
+  phone        String?
+  avatarUrl    String?
+  isAdmin      Boolean  @default(false)
+  roles        Role[]
+  // App extensions
+  emailVerified Boolean @default(false)
+  mfaEnabled    Boolean @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model BuyerProfile {
+  id          String                @id @default(uuid())
+  userId      String                @unique
+  preferences Json?
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+}
+
+model SellerProfile {
+  id                    String             @id @default(uuid())
+  userId                String             @unique
+  bio                   String?
+  verificationStatus    VerificationStatus @default(PENDING)
+  stripeConnectAccountId String?
+  averageRating         Float              @default(0)
+  reviewCount           Int                @default(0)
+  location              Json?
+  radiusKm              Float              @default(50)
+  isOnline              Boolean            @default(false)
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+}
+
+model Category {
+  id             String   @id @default(uuid())
+  slug           String   @unique
+  name           String
+  description    String?
+  metadataSchema Json?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+// MarketMesh calls this "Service" (store.services). The Prisma model is named
+// Service to match the store map, with app-specific columns added below.
+model Service {
+  id              String      @id @default(uuid())
+  sellerId        String
+  categoryId      String
+  title           String
+  description     String
+  price           Float
+  currency        String
+  pricingType     PricingType
+  durationMinutes Int
+  locationType    LocationType
+  location        Json?
+  mediaUrls       String[]
+  isActive        Boolean     @default(true)
+  // App extensions
+  sections        String[]
+  topics          String[]
+  examSlug        String?
+  recordingPolicy String?
+  homeworkPolicy  String?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+}
+
+model AvailabilitySlot {
   id            String   @id @default(uuid())
-  email         String   @unique
-  passwordHash  String
-  role          UserRole
-  emailVerified Boolean  @default(false)
-  mfaEnabled    Boolean  @default(false)
+  sellerId      String
+  startTime     DateTime
+  endTime       DateTime
+  isBooked      Boolean  @default(false)
+  recurringRule Json?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 }
 
-model BuyerProfile {
-  id          String   @id @default(uuid())
-  userId      String   @unique
-  displayName String
-  timezone    String
-  bio         String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-}
-
-model SellerProfile {
-  id                 String             @id @default(uuid())
-  userId             String             @unique
-  displayName        String
-  bio                String?
-  verificationStatus VerificationStatus @default(PENDING)
-  payoutSetup        Boolean            @default(false)
-  createdAt          DateTime           @default(now())
-  updatedAt          DateTime           @updatedAt
-}
-
-model Category {
-  id                    String   @id @default(uuid())
-  slug                  String   @unique
-  name                  String
-  examFamily            String
-  sections              Json
-  scoreScale            String
-  serviceTypes          Json
-  materialPolicy        String
-  prohibitsLiveExamHelp Boolean  @default(true)
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
-}
-
-model ServiceListing {
-  id                      String   @id @default(uuid())
-  sellerProfileId         String
-  categoryId              String
-  title                   String
-  description             String
-  serviceType             String
-  priceAmount             Float
-  currency                String
-  durationMinutes         Int
-  isActive                Boolean  @default(true)
-  examSlug                String
-  sections                Json
-  topics                  Json
-  prerequisitesSummary    String?
-  allowedMaterialsSummary String?
-  recordingPolicy         String?
-  homeworkPolicy          String?
-  packagePlanId           String?
-  cohortClassId           String?
-  createdAt               DateTime @default(now())
-  updatedAt               DateTime @updatedAt
-}
-
-model AvailabilitySlot {
-  id              String   @id @default(uuid())
-  sellerProfileId String
-  startTime       DateTime
-  endTime         DateTime
-  isBooked        Boolean  @default(false)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-}
-
 model Booking {
-  id                 String        @id @default(uuid())
-  buyerProfileId     String
-  sellerProfileId    String
-  serviceListingId   String
-  availabilitySlotId String
-  status             BookingStatus @default(PENDING)
-  finalPrice         Float
-  platformFeePercent Float
-  platformFeeAmount  Float
-  sellerPayoutAmount Float
-  payoutStatus       String?
-  notes              String?
-  createdAt          DateTime      @default(now())
-  updatedAt          DateTime      @updatedAt
+  id                   String        @id @default(uuid())
+  bookingType          BookingType
+  buyerId              String
+  sellerId             String
+  serviceId            String?
+  categoryId           String
+  requestDetails       Json?
+  finalPrice           Float?
+  platformFeePercent   Float
+  platformFeeAmount    Float?
+  sellerPayoutAmount   Float?
+  stripePaymentIntentId String?
+  payoutStatus         PayoutStatus  @default(HOLD)
+  status               BookingStatus @default(PENDING)
+  startTime            DateTime?
+  endTime              DateTime?
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
 }
 
 model Conversation {
   id        String   @id @default(uuid())
   bookingId String   @unique
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
 }
 
 model Message {
   id             String   @id @default(uuid())
   conversationId String
-  authorUserId   String
-  body           String
-  flagged        Boolean  @default(false)
+  senderId       String
+  content        String
+  attachments    String[]
+  readAt         DateTime?
   createdAt      DateTime @default(now())
 }
 
 model Review {
-  id                    String   @id @default(uuid())
-  bookingId             String   @unique
-  authorUserId          String
-  targetSellerProfileId String
-  rating                Int
-  body                  String?
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+  id          String     @id @default(uuid())
+  bookingId   String
+  authorId    String
+  recipientId String
+  role        ReviewRole
+  rating      Int
+  comment     String?
+  createdAt   DateTime   @default(now())
+
+  @@unique([bookingId, authorId])
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  type      String
+  payload   Json
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
 }
 
 model PlatformConfig {
-  id               String   @id @default(uuid())
-  platformFeePercent Float
-  defaultCurrency  String
-  accessTokenTtl   Int
-  refreshTokenTtl  Int
-  updatedAt        DateTime @updatedAt
+  id                  String   @id @default(uuid())
+  key                 String   @unique
+  value               Json
+  updatedAt           DateTime @updatedAt
 }
 
 model StripeEvent {
   id          String   @id @default(uuid())
-  eventId     String   @unique
-  eventType   String
-  processed   Boolean  @default(false)
-  processedAt DateTime?
+  type        String
+  processedAt DateTime
   createdAt   DateTime @default(now())
 }
+
+// ─── APP EXTENSIONS ───────────────────────────────────────────────────────────
+// Exam Heroes–specific models below. These relate to MarketMesh IDs but are
+// owned by the host application and never exposed through generic MarketMesh
+// booking or service payloads.
 
 model ExamProgram {
   id            String   @id @default(uuid())

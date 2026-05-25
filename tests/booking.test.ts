@@ -1,6 +1,5 @@
 import crypto from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
-import { BookingStatus, VerificationStatus } from '../src/types/marketmesh';
 import { createSeededContext, startBookingServer } from './helpers';
 
 describe('booking and payment flows', () => {
@@ -8,24 +7,25 @@ describe('booking and payment flows', () => {
     const seeded = createSeededContext();
     const booking = {
       id: uuidv4(),
-      buyerProfileId: seeded.buyerProfile.id,
-      sellerProfileId: seeded.sellerProfile.id,
-      serviceListingId: seeded.serviceListing.id,
-      availabilitySlotId: seeded.availabilitySlot.id,
-      status: BookingStatus.PENDING,
+      bookingType: 'DIRECT' as const,
+      buyerId: seeded.buyerProfile.id,
+      sellerId: seeded.sellerProfile.id,
+      serviceId: seeded.serviceListing.id,
+      categoryId: seeded.category.id,
+      status: 'PENDING' as const,
       finalPrice: 100,
       platformFeePercent: 18,
       platformFeeAmount: 18,
       sellerPayoutAmount: 82,
-      payoutStatus: 'PENDING',
-      notes: undefined,
-      packagePurchaseId: undefined,
-      contentUploadIds: [],
+      payoutStatus: 'PENDING' as const,
+      requestDetails: { availabilitySlotId: seeded.availabilitySlot.id },
+      startTime: seeded.availabilitySlot.startTime,
+      endTime: seeded.availabilitySlot.endTime,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
     seeded.context.store.bookings.set(booking.id, booking);
-    await seeded.context.hooks.onBookingCreated?.(booking, seeded.context.store);
+    await seeded.context.hooks.onBookingCreated?.(booking);
     const session = Array.from(seeded.context.store.tutoringSessions.values()).find((item) => item.bookingId === booking.id);
     expect(session).toBeDefined();
   });
@@ -34,25 +34,26 @@ describe('booking and payment flows', () => {
     const seeded = createSeededContext();
     const booking = {
       id: uuidv4(),
-      buyerProfileId: seeded.buyerProfile.id,
-      sellerProfileId: seeded.sellerProfile.id,
-      serviceListingId: seeded.serviceListing.id,
-      availabilitySlotId: seeded.availabilitySlot.id,
-      status: BookingStatus.PENDING,
+      bookingType: 'DIRECT' as const,
+      buyerId: seeded.buyerProfile.id,
+      sellerId: seeded.sellerProfile.id,
+      serviceId: seeded.serviceListing.id,
+      categoryId: seeded.category.id,
+      status: 'PENDING' as const,
       finalPrice: 100,
       platformFeePercent: 18,
       platformFeeAmount: 18,
       sellerPayoutAmount: 82,
-      payoutStatus: 'PENDING',
-      notes: 'safe note',
-      packagePurchaseId: undefined,
-      contentUploadIds: [],
+      payoutStatus: 'PENDING' as const,
+      requestDetails: { availabilitySlotId: seeded.availabilitySlot.id, safeNote: 'safe note' },
+      startTime: seeded.availabilitySlot.startTime,
+      endTime: seeded.availabilitySlot.endTime,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
     seeded.context.store.bookings.set(booking.id, booking);
-    const payload = (await seeded.context.hooks.extendBookingPayload?.(booking, seeded.context.store)) as Record<string, unknown>;
-    expect(payload.id).toBe(booking.id);
+    const payload = (await seeded.context.hooks.extendBookingPayload?.(booking)) as Record<string, unknown>;
+    expect(payload.examSlug).toBe('lsat');
     expect(payload).not.toHaveProperty('moderationNotes');
     expect(payload).not.toHaveProperty('fraudScore');
     expect(payload).not.toHaveProperty('paymentSecret');
@@ -60,42 +61,39 @@ describe('booking and payment flows', () => {
     expect(payload).not.toHaveProperty('scoreDocuments');
   });
 
-  it('Booking fails when hero lacks verified expertise', async () => {
+  it('Booking fails when hero lacks verified expertise', () => {
     const seeded = createSeededContext();
     seeded.context.store.heroExamExpertise.clear();
-    const preflight = await seeded.context.hooks.beforeBooking?.(
-      {
-        buyerProfileId: seeded.buyerProfile.id,
-        sellerProfileId: seeded.sellerProfile.id,
-        serviceListingId: seeded.serviceListing.id,
-        availabilitySlotId: seeded.availabilitySlot.id,
-        requestDescription: 'Need concept review',
-        examProgramId: seeded.examProgram.id,
-      },
-      seeded.context.store,
-    );
-    expect(preflight?.allowed).toBe(false);
-    expect(preflight?.reasons).toContain('Hero lacks verified expertise for the exam');
+    const preflight = seeded.context.services.integrityModerationService.canBookingProceed({
+      buyerId: seeded.buyerProfile.id,
+      sellerId: seeded.sellerProfile.id,
+      serviceId: seeded.serviceListing.id,
+      categoryId: seeded.category.id,
+      startTime: seeded.availabilitySlot.startTime,
+      endTime: seeded.availabilitySlot.endTime,
+      requestDetails: { requestDescription: 'Need concept review' },
+    });
+    expect(preflight.allowed).toBe(false);
+    expect(preflight.reasons).toContain('Hero lacks verified expertise for the exam');
   });
 
-  it('Booking fails when learner has not attested to policy', async () => {
+  it('Booking fails when learner has not attested to policy', () => {
     const seeded = createSeededContext();
-    seeded.context.store.integrityAttestations = new Map(
+    const filtered = new Map(
       Array.from(seeded.context.store.integrityAttestations.entries()).filter(([, attestation]) => attestation.userId !== seeded.buyerUser.id),
     );
-    const preflight = await seeded.context.hooks.beforeBooking?.(
-      {
-        buyerProfileId: seeded.buyerProfile.id,
-        sellerProfileId: seeded.sellerProfile.id,
-        serviceListingId: seeded.serviceListing.id,
-        availabilitySlotId: seeded.availabilitySlot.id,
-        requestDescription: 'Need concept review',
-        examProgramId: seeded.examProgram.id,
-      },
-      seeded.context.store,
-    );
-    expect(preflight?.allowed).toBe(false);
-    expect(preflight?.reasons).toContain('Learner has not attested to the current integrity policy');
+    (seeded.context.store as { integrityAttestations: typeof filtered }).integrityAttestations = filtered;
+    const preflight = seeded.context.services.integrityModerationService.canBookingProceed({
+      buyerId: seeded.buyerProfile.id,
+      sellerId: seeded.sellerProfile.id,
+      serviceId: seeded.serviceListing.id,
+      categoryId: seeded.category.id,
+      startTime: seeded.availabilitySlot.startTime,
+      endTime: seeded.availabilitySlot.endTime,
+      requestDetails: { requestDescription: 'Need concept review' },
+    });
+    expect(preflight.allowed).toBe(false);
+    expect(preflight.reasons).toContain('Learner has not attested to the current integrity policy');
   });
 
   it('Package credit reserve and consume', async () => {
@@ -135,12 +133,11 @@ describe('booking and payment flows', () => {
           authorization: `Bearer ${started.buyerAccessToken}`,
         },
         body: JSON.stringify({
-          sellerProfileId: started.sellerProfile.id,
-          serviceListingId: started.serviceListing.id,
+          sellerId: started.sellerProfile.id,
+          serviceId: started.serviceListing.id,
           availabilitySlotId: started.availabilitySlot.id,
-          examProgramId: started.examProgram.id,
           packagePurchaseId: purchase.id,
-          requestDescription: 'Need help with logic games strategy',
+          requestDetails: { requestDescription: 'Need help with logic games strategy' },
         }),
       });
       expect(response.status).toBe(201);

@@ -15,7 +15,7 @@ class PaymentAdapter {
         return {
             id: `pi_${booking.id}`,
             clientSecret: `secret_${booking.id}`,
-            amount: booking.finalPrice,
+            amount: booking.finalPrice ?? 0,
             currency: 'usd',
             status: 'requires_capture',
         };

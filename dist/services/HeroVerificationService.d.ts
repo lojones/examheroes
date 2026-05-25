@@ -1,4 +1,4 @@
-import { type MarketMeshStore, VerificationStatus } from '../types/marketmesh';
+import { type MarketMeshStore } from '../types/marketmesh';
 export declare class HeroVerificationService {
     private readonly store;
     constructor(store: MarketMeshStore);
@@ -24,7 +24,7 @@ export declare class HeroVerificationService {
         id: string;
         sellerProfileId: string;
         examProgramId: string;
-        verificationStatus: VerificationStatus;
+        verificationStatus: "PENDING";
         scoreEvidence: string | undefined;
         certificationEvidence: string | undefined;
         approvedAt: Date | undefined;

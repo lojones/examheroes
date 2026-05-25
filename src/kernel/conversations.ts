@@ -1,8 +1,14 @@
 import { Router } from 'express';
-import { v4 as uuidv4 } from 'uuid';
 import { authenticate, type AuthenticatedRequest } from './common';
 import { type KernelContext } from './index';
 import { ContentPolicyService } from '../services/ContentPolicyService';
+
+function getExamSlug(store: KernelContext['store'], bookingId: string): string | undefined {
+  const booking = store.bookings.get(bookingId);
+  const service = booking?.serviceId ? store.services.get(booking.serviceId) : undefined;
+  const categoryId = service?.categoryId ?? booking?.categoryId;
+  return categoryId ? store.categories.get(categoryId)?.slug : undefined;
+}
 
 export function createConversationsRouter({ config, store }: KernelContext) {
   const router = Router();
@@ -28,21 +34,22 @@ export function createConversationsRouter({ config, store }: KernelContext) {
       res.status(404).json({ error: 'Conversation not found' });
       return;
     }
-    const booking = Array.from(store.bookings.values()).find((item) => item.id === conversation.bookingId);
-    const service = booking ? store.serviceListings.get(booking.serviceListingId) : undefined;
-    const body = (req.body as { body?: string }).body ?? '';
-    const scan = contentPolicyService.scanText(body, service?.examSlug);
+
+    const content = (req.body as { content?: string; body?: string }).content ?? (req.body as { body?: string }).body ?? '';
+    const scan = contentPolicyService.scanText(content, getExamSlug(store, conversation.bookingId));
     if (scan.flagged) {
       res.status(422).json({ error: 'Message blocked by content policy', reasons: scan.reasons });
       return;
     }
+
     const message = {
-      id: uuidv4(),
+      id: store.id(),
       conversationId: conversation.id,
-      authorUserId: req.user!.sub,
-      body,
-      flagged: false,
-      createdAt: new Date(),
+      senderId: req.user!.sub,
+      content,
+      attachments: ((req.body as { attachments?: string[] }).attachments ?? []) as string[],
+      createdAt: store.now(),
+      readAt: undefined,
     };
     store.messages.set(message.id, message);
     res.status(201).json(message);

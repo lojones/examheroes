@@ -53,9 +53,10 @@ describe('matching service', () => {
 
   it('hero without policy acceptance should be excluded', () => {
     const seeded = createSeededContext();
-    seeded.context.store.integrityAttestations = new Map(
+    const filtered = new Map(
       Array.from(seeded.context.store.integrityAttestations.entries()).filter(([, attestation]) => attestation.userId !== seeded.sellerUser.id),
     );
+    (seeded.context.store as { integrityAttestations: typeof filtered }).integrityAttestations = filtered;
     const service = new MatchingService(
       seeded.context.store,
       new HeroVerificationService(seeded.context.store),

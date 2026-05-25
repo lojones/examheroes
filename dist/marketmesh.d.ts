@@ -1,5 +1,4 @@
 import { MarketMeshKernel } from './kernel';
-import { InMemoryMarketMeshStore } from './kernel/store';
 import { ContentPolicyService } from './services/ContentPolicyService';
 import { DiagnosticService } from './services/DiagnosticService';
 import { ExamTaxonomyService } from './services/ExamTaxonomyService';
@@ -9,7 +8,7 @@ import { MatchingService } from './services/MatchingService';
 import { NotificationService } from './services/NotificationService';
 import { PaymentAdapter } from './services/PaymentAdapter';
 import { StudyPlanService } from './services/StudyPlanService';
-import { type MarketMeshConfig, type MarketMeshHooks } from './types/marketmesh';
+import type { MarketMeshConfig, MarketMeshHooks } from './types/marketmesh';
 export interface ExamHeroesServices {
     contentPolicyService: ContentPolicyService;
     heroVerificationService: HeroVerificationService;
@@ -24,7 +23,7 @@ export interface ExamHeroesServices {
 export declare function createExamHeroesContext(): {
     config: MarketMeshConfig;
     hooks: MarketMeshHooks;
-    store: InMemoryMarketMeshStore;
+    store: import("./kernel/store").InMemoryMarketMeshStore;
     kernel: MarketMeshKernel;
     services: ExamHeroesServices;
 };
