@@ -1,0 +1,575 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  LEARNER
+  HERO
+  ADMIN
+  MODERATOR
+}
+
+enum VerificationStatus {
+  PENDING
+  APPROVED
+  SUSPENDED
+  VERIFIED
+  REJECTED
+}
+
+enum BookingStatus {
+  PENDING
+  ACCEPTED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  DISPUTED
+}
+
+enum DiagnosticAttemptStatus {
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum StudyPlanTaskStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  SKIPPED
+}
+
+enum ContentUploadStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  FLAGGED
+}
+
+enum TutoringSessionStatus {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum PackagePurchaseStatus {
+  ACTIVE
+  EXPIRED
+  EXHAUSTED
+}
+
+enum IntegrityReportStatus {
+  OPEN
+  INVESTIGATING
+  RESOLVED
+  DISMISSED
+}
+
+model User {
+  id            String   @id @default(uuid())
+  email         String   @unique
+  passwordHash  String
+  role          UserRole
+  emailVerified Boolean  @default(false)
+  mfaEnabled    Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model BuyerProfile {
+  id          String   @id @default(uuid())
+  userId      String   @unique
+  displayName String
+  timezone    String
+  bio         String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model SellerProfile {
+  id                 String             @id @default(uuid())
+  userId             String             @unique
+  displayName        String
+  bio                String?
+  verificationStatus VerificationStatus @default(PENDING)
+  payoutSetup        Boolean            @default(false)
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+}
+
+model Category {
+  id                    String   @id @default(uuid())
+  slug                  String   @unique
+  name                  String
+  examFamily            String
+  sections              Json
+  scoreScale            String
+  serviceTypes          Json
+  materialPolicy        String
+  prohibitsLiveExamHelp Boolean  @default(true)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+
+model ServiceListing {
+  id                      String   @id @default(uuid())
+  sellerProfileId         String
+  categoryId              String
+  title                   String
+  description             String
+  serviceType             String
+  priceAmount             Float
+  currency                String
+  durationMinutes         Int
+  isActive                Boolean  @default(true)
+  examSlug                String
+  sections                Json
+  topics                  Json
+  prerequisitesSummary    String?
+  allowedMaterialsSummary String?
+  recordingPolicy         String?
+  homeworkPolicy          String?
+  packagePlanId           String?
+  cohortClassId           String?
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+}
+
+model AvailabilitySlot {
+  id              String   @id @default(uuid())
+  sellerProfileId String
+  startTime       DateTime
+  endTime         DateTime
+  isBooked        Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model Booking {
+  id                 String        @id @default(uuid())
+  buyerProfileId     String
+  sellerProfileId    String
+  serviceListingId   String
+  availabilitySlotId String
+  status             BookingStatus @default(PENDING)
+  finalPrice         Float
+  platformFeePercent Float
+  platformFeeAmount  Float
+  sellerPayoutAmount Float
+  payoutStatus       String?
+  notes              String?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+}
+
+model Conversation {
+  id        String   @id @default(uuid())
+  bookingId String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Message {
+  id             String   @id @default(uuid())
+  conversationId String
+  authorUserId   String
+  body           String
+  flagged        Boolean  @default(false)
+  createdAt      DateTime @default(now())
+}
+
+model Review {
+  id                    String   @id @default(uuid())
+  bookingId             String   @unique
+  authorUserId          String
+  targetSellerProfileId String
+  rating                Int
+  body                  String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+
+model PlatformConfig {
+  id               String   @id @default(uuid())
+  platformFeePercent Float
+  defaultCurrency  String
+  accessTokenTtl   Int
+  refreshTokenTtl  Int
+  updatedAt        DateTime @updatedAt
+}
+
+model StripeEvent {
+  id          String   @id @default(uuid())
+  eventId     String   @unique
+  eventType   String
+  processed   Boolean  @default(false)
+  processedAt DateTime?
+  createdAt   DateTime @default(now())
+}
+
+model ExamProgram {
+  id            String   @id @default(uuid())
+  slug          String   @unique
+  name          String
+  examFamily    String
+  abbreviation  String
+  governingBody String
+  sections      Json
+  scoreScale    String
+  description   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model ExamSection {
+  id            String   @id @default(uuid())
+  examProgramId String
+  name          String
+  slug          String
+  description   String?
+  weight        Float
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model ExamTopic {
+  id            String   @id @default(uuid())
+  examSectionId String
+  name          String
+  slug          String
+  description   String?
+  difficulty    String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model IntegrityPolicy {
+  id                       String   @id @default(uuid())
+  examProgramId            String
+  version                  String
+  prohibitsLiveExamHelp    Boolean
+  prohibitsBrainDumps      Boolean
+  prohibitsSecureContent   Boolean
+  prohibitsProctoringBypass Boolean
+  prohibitsProxyTesting    Boolean
+  allowedMaterials         Json
+  requiredAttestation      Boolean  @default(true)
+  fullPolicyText           String
+  effectiveAt              DateTime
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+}
+
+model IntegrityAttestation {
+  id                String   @id @default(uuid())
+  userId            String
+  integrityPolicyId String
+  attestedAt        DateTime
+  ipAddress         String?
+  createdAt         DateTime @default(now())
+}
+
+model HeroCredential {
+  id                    String   @id @default(uuid())
+  sellerProfileId       String   @unique
+  legalName             String
+  identityVerified      Boolean  @default(false)
+  identityVerifiedAt    DateTime?
+  backgroundCheckStatus String?
+  backgroundCheckAt     DateTime?
+  payoutAccountId       String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+
+model HeroExamExpertise {
+  id                 String             @id @default(uuid())
+  sellerProfileId    String
+  examProgramId      String
+  verificationStatus VerificationStatus @default(PENDING)
+  scoreEvidence      String?
+  certificationEvidence String?
+  approvedAt         DateTime?
+  approvedBy         String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model ScoreVerification {
+  id                 String   @id @default(uuid())
+  sellerProfileId    String
+  examProgramId      String
+  claimedScore       String
+  evidenceUrl        String
+  verificationStatus String
+  reviewedBy         String?
+  reviewedAt         DateTime?
+  notes              String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model TeachingSample {
+  id                 String   @id @default(uuid())
+  sellerProfileId    String
+  title              String
+  description        String?
+  sampleUrl          String
+  verificationStatus String
+  reviewedBy         String?
+  reviewedAt         DateTime?
+  notes              String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model LearnerExamProfile {
+  id                    String   @id @default(uuid())
+  buyerProfileId        String
+  examProgramId         String
+  targetDate            DateTime?
+  targetScore           Float?
+  currentScore          Float?
+  weakTopics            Json
+  budget                Float?
+  timezone              String
+  learningPreferences   Json
+  integrityAttestationId String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+
+model DiagnosticAssessment {
+  id               String   @id @default(uuid())
+  examProgramId    String
+  title            String
+  description      String?
+  totalQuestions   Int
+  timeLimitMinutes Int
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model DiagnosticAttempt {
+  id                     String                  @id @default(uuid())
+  diagnosticAssessmentId String
+  buyerProfileId         String
+  status                 DiagnosticAttemptStatus @default(IN_PROGRESS)
+  startedAt              DateTime @default(now())
+  completedAt            DateTime?
+  totalScore             Float?
+  sectionBreakdown       Json
+  topicBreakdown         Json
+  timingBreakdown        Json
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+}
+
+model StudyPlan {
+  id           String   @id @default(uuid())
+  buyerProfileId String
+  examProgramId String
+  bookingId     String?
+  targetDate    DateTime?
+  generatedAt   DateTime @default(now())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model StudyPlanTask {
+  id          String             @id @default(uuid())
+  studyPlanId String
+  title       String
+  description String?
+  topicId     String?
+  dueDate     DateTime?
+  status      StudyPlanTaskStatus @default(PENDING)
+  priority    Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model ErrorLogEntry {
+  id                  String   @id @default(uuid())
+  buyerProfileId      String
+  examProgramId       String
+  topicId             String?
+  questionDescription String
+  errorAnalysis       String?
+  heroNotes           String?
+  createdAt           DateTime @default(now())
+}
+
+model PracticeQuestion {
+  id               String   @id @default(uuid())
+  examProgramId    String
+  sectionId        String?
+  topicId          String?
+  questionText     String
+  options          Json
+  correctAnswer    String
+  explanation      String
+  difficulty       String
+  source           String?
+  contentLicenseId String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model ContentLicense {
+  id          String   @id @default(uuid())
+  name        String
+  licensor    String?
+  licenseType String
+  allowedUses Json
+  expiresAt   DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model ContentUpload {
+  id                String              @id @default(uuid())
+  buyerProfileId    String
+  fileName          String
+  fileHash          String
+  fileSizeBytes     Int
+  mimeType          String
+  sourceDeclaration String?
+  status            ContentUploadStatus @default(PENDING)
+  scanResult        Json
+  reviewedBy        String?
+  reviewedAt        DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model TutoringSession {
+  id                    String               @id @default(uuid())
+  bookingId             String               @unique
+  sellerProfileId       String
+  buyerProfileId        String
+  examProgramId         String?
+  status                TutoringSessionStatus @default(SCHEDULED)
+  joinToken             String
+  startedAt             DateTime?
+  completedAt           DateTime?
+  recordingConsent      Boolean              @default(false)
+  recordingUrl          String?
+  heroSummary           String?
+  homeworkNotes         String?
+  studyPlanId           String?
+  policySnapshotVersion String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+
+model SessionArtifact {
+  id                String   @id @default(uuid())
+  tutoringSessionId String
+  uploadId          String?
+  artifactType      String
+  createdAt         DateTime @default(now())
+}
+
+model PackagePlan {
+  id              String   @id @default(uuid())
+  sellerProfileId String
+  title           String
+  description     String?
+  sessionCount    Int
+  priceAmount     Float
+  currency        String
+  expiryDays      Int
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model PackagePurchase {
+  id             String                @id @default(uuid())
+  packagePlanId  String
+  buyerProfileId String
+  totalSessions  Int
+  usedSessions   Int                   @default(0)
+  expiresAt      DateTime
+  status         PackagePurchaseStatus @default(ACTIVE)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model CohortClass {
+  id             String   @id @default(uuid())
+  serviceListingId String
+  sellerProfileId String
+  title          String
+  maxEnrollment  Int
+  scheduledAt    DateTime
+  status         String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model MatchRun {
+  id                 String   @id @default(uuid())
+  buyerProfileId     String
+  examProgramId      String
+  requestDescription String?
+  isLiveExamRequest  Boolean  @default(false)
+  createdAt          DateTime @default(now())
+}
+
+model MatchCandidate {
+  id                  String   @id @default(uuid())
+  matchRunId          String
+  sellerProfileId     String
+  totalScore          Float
+  topicFitScore       Float
+  expertiseScore      Float
+  availabilityScore   Float
+  teachingStyleScore  Float
+  priceScore          Float
+  reviewScore         Float
+  certificationScore  Float
+  reliabilityScore    Float
+  inclusionReasons    Json
+  exclusionReason     String?
+  createdAt           DateTime @default(now())
+}
+
+model IntegrityReport {
+  id             String               @id @default(uuid())
+  reporterUserId String
+  reportedUserId String?
+  bookingId      String?
+  reportType     String
+  description    String
+  evidenceUrls   Json
+  status         IntegrityReportStatus @default(OPEN)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model ModerationAction {
+  id                String   @id @default(uuid())
+  integrityReportId String
+  moderatorUserId   String
+  action            String
+  reason            String
+  createdAt         DateTime @default(now())
+}
+
+model OutcomeSnapshot {
+  id               String   @id @default(uuid())
+  buyerProfileId   String
+  examProgramId    String
+  reportedScore    Float
+  reportedAt       DateTime
+  consentedToShare Boolean  @default(false)
+  createdAt        DateTime @default(now())
+}

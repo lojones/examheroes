@@ -1,0 +1,46 @@
+import { type MarketMeshConfig, type MarketMeshStore, type PlatformConfig } from '../types/marketmesh';
+export declare class InMemoryMarketMeshStore implements MarketMeshStore {
+    users: Map<any, any>;
+    buyerProfiles: Map<any, any>;
+    sellerProfiles: Map<any, any>;
+    categories: Map<any, any>;
+    serviceListings: Map<any, any>;
+    availabilitySlots: Map<any, any>;
+    bookings: Map<any, any>;
+    conversations: Map<any, any>;
+    messages: Map<any, any>;
+    reviews: Map<any, any>;
+    stripeEvents: Map<any, any>;
+    refreshTokens: Map<any, any>;
+    examPrograms: Map<any, any>;
+    examSections: Map<any, any>;
+    examTopics: Map<any, any>;
+    integrityPolicies: Map<any, any>;
+    integrityAttestations: Map<any, any>;
+    heroCredentials: Map<any, any>;
+    heroExamExpertise: Map<any, any>;
+    scoreVerifications: Map<any, any>;
+    teachingSamples: Map<any, any>;
+    learnerExamProfiles: Map<any, any>;
+    diagnosticAssessments: Map<any, any>;
+    diagnosticAttempts: Map<any, any>;
+    studyPlans: Map<any, any>;
+    studyPlanTasks: Map<any, any>;
+    errorLogEntries: Map<any, any>;
+    practiceQuestions: Map<any, any>;
+    contentLicenses: Map<any, any>;
+    contentUploads: Map<any, any>;
+    tutoringSessions: Map<any, any>;
+    sessionArtifacts: Map<any, any>;
+    packagePlans: Map<any, any>;
+    packagePurchases: Map<any, any>;
+    cohortClasses: Map<any, any>;
+    matchRuns: Map<any, any>;
+    matchCandidates: Map<any, any>;
+    integrityReports: Map<any, any>;
+    moderationActions: Map<any, any>;
+    outcomeSnapshots: Map<any, any>;
+    platformConfig: PlatformConfig;
+    constructor(config: MarketMeshConfig);
+}
+//# sourceMappingURL=store.d.ts.map
